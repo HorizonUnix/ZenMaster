@@ -24,9 +24,9 @@ def status_name(code: int) -> str:
 
 def _backend():
     if _IS_WINDOWS:
-        from zenpy import windows
+        from zenmaster import windows
         return windows
-    from zenpy import linux
+    from zenmaster import linux
     return linux
 
 

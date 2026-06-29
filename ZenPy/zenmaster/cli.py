@@ -7,10 +7,10 @@ import struct
 import sys
 import time
 
-from zenpy import __version__, runner, smu
-from zenpy.apply import apply
-from zenpy.hardware import CpuInfo, detect
-from zenpy.table import read_table
+from zenmaster import __version__, runner, smu
+from zenmaster.apply import apply
+from zenmaster.hardware import CpuInfo, detect
+from zenmaster.table import read_table
 
 _CATEGORIES: dict[str, list[str]] = {
     "Power limits":    ["stapm-limit", "fast-limit", "slow-limit", "ppt-limit",
@@ -163,9 +163,9 @@ def _is_root() -> bool:
 def _show_help(info: CpuInfo) -> None:
     supported = set(runner.get_supported_args(info.family))
     socket = runner.get_socket(info.family) or "unknown"
-    print(f"ZenPy — Ryzen Power Management Tool")
+    print(f"ZenMaster — Ryzen Power Management Tool")
     print()
-    print("Usage: zenpy [OPTIONS] [TUNING ARGS...]")
+    print("Usage: zenmaster [OPTIONS] [TUNING ARGS...]")
     print()
     print("Options:")
     print("  --info           Show CPU and backend info")
@@ -270,7 +270,7 @@ def _require_pm_table(json_out: bool, family: str = "") -> bytes:
         if json_out:
             print(json.dumps({"error": msg}))
         else:
-            print(f"ZenPy: {msg}", file=sys.stderr)
+            print(f"ZenMaster: {msg}", file=sys.stderr)
         sys.exit(1)
     data = smu.read_pm_table(family)
     if not data:
@@ -278,7 +278,7 @@ def _require_pm_table(json_out: bool, family: str = "") -> bytes:
         if json_out:
             print(json.dumps({"error": msg}))
         else:
-            print(f"ZenPy: {msg}", file=sys.stderr)
+            print(f"ZenMaster: {msg}", file=sys.stderr)
         sys.exit(1)
     return data
 
@@ -338,7 +338,7 @@ def main() -> None:
     info = detect()
 
     if info.type not in ("Amd_Apu", "Amd_Desktop_Cpu"):
-        print(f"ZenPy: unsupported CPU '{info.name}' (only AMD Ryzen supported)", file=sys.stderr)
+        print(f"ZenMaster: unsupported CPU '{info.name}' (only AMD Ryzen supported)", file=sys.stderr)
         sys.exit(1)
 
     backend: str | None = None
@@ -348,20 +348,20 @@ def main() -> None:
             backend = smu.init()
         except RuntimeError as e:
             if not flags.json_out:
-                print(f"ZenPy: backend unavailable: {e}", file=sys.stderr)
+                print(f"ZenMaster: backend unavailable: {e}", file=sys.stderr)
         _show_info(info, backend, flags.json_out)
         if not rest and not flags.dump_table and not flags.table:
             sys.exit(0)
 
     if (flags.table or flags.dump_table or rest) and backend is None:
         if not _is_root():
-            print("ZenPy: root/admin privileges required.", file=sys.stderr)
+            print("ZenMaster: root/admin privileges required.", file=sys.stderr)
             print("       Run with sudo (Linux) or as Administrator (Windows).", file=sys.stderr)
             sys.exit(1)
         try:
             backend = smu.init()
         except RuntimeError as e:
-            print(f"ZenPy: backend error: {e}", file=sys.stderr)
+            print(f"ZenMaster: backend error: {e}", file=sys.stderr)
             sys.exit(1)
 
     if flags.table:
@@ -394,4 +394,4 @@ def main() -> None:
                 time.sleep(flags.reapply)
         except KeyboardInterrupt:
             if not flags.json_out:
-                print("\nZenPy: stopped.")
+                print("\nZenMaster: stopped.")

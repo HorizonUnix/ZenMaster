@@ -1,6 +1,6 @@
 from __future__ import annotations
 import shlex
-from zenpy import runner, smu
+from zenmaster import runner, smu
 
 _SKIN_ARGS = {"apu-skin-temp", "dgpu-skin-temp", "skin-temp-limit"}
 

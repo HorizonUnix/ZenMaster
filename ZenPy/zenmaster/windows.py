@@ -92,7 +92,7 @@ _PAWNIO_INSTALLER_URL = "https://github.com/namazso/PawnIO.Setup/releases/latest
 
 
 def _assets_dir() -> str:
-    return os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets")
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
 
 
 def _pawnio_info() -> str | None:
@@ -150,7 +150,7 @@ def init() -> str:
         raise RuntimeError(
             "PawnIO driver is not installed.\n"
             f"Download and run the installer: {_PAWNIO_INSTALLER_URL}\n"
-            "After installation, reboot and run ZenPy again."
+            "After installation, reboot and try again."
         )
 
     k32    = _make_k32()
@@ -161,26 +161,30 @@ def init() -> str:
             f"If not installed: {_PAWNIO_INSTALLER_URL}"
         )
 
-    data   = open(module_path, "rb").read()
-    in_buf = ctypes.create_string_buffer(data)
-    ret    = ctypes.wintypes.DWORD(0)
-    ok     = k32.DeviceIoControl(
-        ctypes.wintypes.HANDLE(handle),
-        ctypes.wintypes.DWORD(_IOCTL_LOAD),
-        ctypes.cast(in_buf, ctypes.c_void_p),
-        ctypes.wintypes.DWORD(len(data)),
-        None, 0,
-        ctypes.byref(ret), None,
-    )
-    if not ok:
-        err = k32.GetLastError()
-        k32.CloseHandle(handle)
-        ver_str = f" (PawnIO v{ver})" if ver else ""
-        raise RuntimeError(
-            f"PawnIO LoadBinary failed (error {err}){ver_str}\n"
-            "  Make sure you are running as Administrator and PawnIO is fully installed.\n"
-            f"  If error is 1 (INVALID_FUNCTION), try reinstalling PawnIO: {_PAWNIO_INSTALLER_URL}"
+    try:
+        with open(module_path, "rb") as f:
+            data = f.read()
+        in_buf = ctypes.create_string_buffer(data)
+        ret    = ctypes.wintypes.DWORD(0)
+        ok     = k32.DeviceIoControl(
+            ctypes.wintypes.HANDLE(handle),
+            ctypes.wintypes.DWORD(_IOCTL_LOAD),
+            ctypes.cast(in_buf, ctypes.c_void_p),
+            ctypes.wintypes.DWORD(len(data)),
+            None, 0,
+            ctypes.byref(ret), None,
         )
+        if not ok:
+            err = k32.GetLastError()
+            ver_str = f" (PawnIO v{ver})" if ver else ""
+            raise RuntimeError(
+                f"PawnIO LoadBinary failed (error {err}){ver_str}\n"
+                "  Make sure you are running as Administrator and PawnIO is fully installed.\n"
+                f"  If error is 1 (INVALID_FUNCTION), try reinstalling PawnIO: {_PAWNIO_INSTALLER_URL}"
+            )
+    except Exception:
+        k32.CloseHandle(handle)
+        raise
 
     _handle = handle
     _k32    = k32
@@ -192,7 +196,8 @@ def active_backend() -> str | None:
 
 
 def _execute(fn_name: str, in_args: list[int], out_count: int) -> list[int]:
-    name_buf = struct.pack("32s", fn_name.encode("ascii")[:31])
+    fn_bytes = fn_name.encode("ascii")[:31]
+    name_buf = struct.pack("32s", fn_bytes)
     args_buf = struct.pack(f"<{len(in_args)}q", *in_args) if in_args else b""
     payload  = name_buf + args_buf
     in_buf   = ctypes.create_string_buffer(payload)

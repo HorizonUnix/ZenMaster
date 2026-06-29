@@ -1,12 +1,40 @@
 [build-system]
-requires = ["setuptools"]
-build-backend = "setuptools.backends.legacy:build"
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
 
 [project]
-name = "zenpy"
+name = "zenmaster"
 version = "0.1.0"
 requires-python = ">=3.10"
-description = "Pure-Python cross-platform RyzenAdj reimplementation"
+description = "Pure-Python AMD Ryzen SMU power management for Linux and Windows"
+readme = "README.md"
+license = { text = "GPL-3.0-only" }
+keywords = ["amd", "ryzen", "ryzenadj", "smu", "power-management", "tuning"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: System :: Hardware",
+    "Topic :: Utilities",
+]
 
 [project.scripts]
-zenpy = "zenpy.cli:main"
+zenmaster = "zenmaster.cli:main"
+
+[project.optional-dependencies]
+dev = ["pytest>=7"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["zenmaster*"]
+
+[tool.setuptools.package-data]
+zenmaster = ["assets/AMD/PawnIO/*.bin"]

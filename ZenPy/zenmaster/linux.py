@@ -84,25 +84,38 @@ def secure_boot_enabled() -> bool:
 
 def init() -> str:
     global _backend
-    if secure_boot_enabled():
-        if not os.path.isdir(DRIVER_PATH):
-            raise RuntimeError(
-                "Secure Boot is enabled but ryzen_smu is not loaded.\n"
-                "Install and load the ryzen_smu kernel module before running ZenPy."
-            )
+
+    if os.path.isdir(DRIVER_PATH):
         if not os.path.exists(SMN_PATH):
             raise RuntimeError(
-                "ryzen_smu is loaded but the /smn interface is missing. "
-                "Upgrade to ryzen_smu >= 0.1.7."
+                "ryzen_smu is loaded but the /smn interface is missing — "
+                "upgrade to ryzen_smu >= 0.1.7."
             )
         _backend = "ryzen_smu"
-    else:
-        if not os.path.exists(PCI_CONFIG):
-            raise RuntimeError(
-                f"PCI config not found at {PCI_CONFIG}. Are you running as root?"
-            )
+        return _backend
+
+    if secure_boot_enabled():
+        raise RuntimeError(
+            "Secure Boot is enabled and ryzen_smu is not loaded.\n"
+            "Kernel lockdown mode also blocks PCI direct access, so there is no fallback.\n"
+            "\n"
+            "Options:\n"
+            "  1. Sign the ryzen_smu module with a MOK key and enroll it:\n"
+            "       https://github.com/amkillam/ryzen_smu\n"
+            "  2. Disable Secure Boot in UEFI firmware settings."
+        )
+
+    if os.path.exists(PCI_CONFIG):
         _backend = "pci"
-    return _backend
+        return _backend
+
+    raise RuntimeError(
+        "No SMU backend found.\n"
+        f"  ryzen_smu module not loaded (expected: {DRIVER_PATH})\n"
+        f"  PCI config not accessible (expected: {PCI_CONFIG})\n"
+        "Make sure you are running as root and the module is installed:\n"
+        "  https://github.com/amkillam/ryzen_smu"
+    )
 
 
 def active_backend() -> str | None:
