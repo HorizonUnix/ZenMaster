@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.1.1] - 2026-06-29
+
+### Fixed
+- Workflow and packaging fixes for initial PyPI release
+
 ## [0.1.0] - 2026-06-29
 
 ### Added
