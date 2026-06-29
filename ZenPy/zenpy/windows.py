@@ -14,8 +14,8 @@ _DEVICE_PATHS = [
     r"\\.\PawnIO",
 ]
 _FN_NAME_LEN = 32
-_IOCTL_LOAD  = 0xA1722084
-_IOCTL_EXEC  = 0xA1722104
+_IOCTL_LOAD  = 0xA1B22084
+_IOCTL_EXEC  = 0xA1B22104
 _NARGS       = 6
 _POLL_N      = 8192
 _lock        = threading.Lock()
@@ -105,6 +105,18 @@ def _pawnio_installed() -> bool:
         return False
 
 
+def _pawnio_version() -> str | None:
+    try:
+        import winreg
+        key = winreg.OpenKey(
+            winreg.HKEY_LOCAL_MACHINE,
+            r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\PawnIO",
+        )
+        return winreg.QueryValueEx(key, "DisplayVersion")[0]
+    except OSError:
+        return None
+
+
 def _setup_k32():
     import ctypes
     import ctypes.wintypes
@@ -175,7 +187,13 @@ def init() -> str:
     if not ok:
         err = k32.GetLastError()
         k32.CloseHandle(handle)
-        raise RuntimeError(f"PawnIO LoadBinary failed (error {err})")
+        ver = _pawnio_version()
+        ver_str = f" (PawnIO v{ver})" if ver else ""
+        raise RuntimeError(
+            f"PawnIO LoadBinary failed (error {err}){ver_str}\n"
+            "  Make sure you are running as Administrator and PawnIO is fully installed.\n"
+            f"  If error is 1 (INVALID_FUNCTION), try reinstalling PawnIO: {_PAWNIO_INSTALLER_URL}"
+        )
 
     _handle = handle
     return "pawnio"
@@ -249,10 +267,10 @@ def _mailbox_query(msg: int, rsp: int, args_base: int, op: int) -> tuple[int, li
 
 def _read_physical_memory(phys_addr: int, size: int) -> bytes | None:
     n = (size + 7) // 8
-    raw = _execute("ioctl_read_memory", [phys_addr, n], n)
-    if not raw:
-        return None
-    return struct.pack(f"<{len(raw)}q", *raw)[:size]
+    raw = _execute("ioctl_read_pm_table", [phys_addr, n], n)
+    if raw and any(raw):
+        return struct.pack(f"<{len(raw)}q", *raw)[:size]
+    return None
 
 
 def _send(table: dict, default: tuple, family: str, op: int, arg0: int) -> int:

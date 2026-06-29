@@ -1,7 +1,6 @@
 from __future__ import annotations
 import os
 import platform
-import subprocess
 from dataclasses import dataclass
 
 
@@ -55,14 +54,13 @@ def _parse_processor_identifier() -> tuple[int, int, str]:
 
     cpu_name = ""
     try:
-        result = subprocess.run(
-            ["wmic", "cpu", "get", "name", "/value"],
-            capture_output=True, text=True, timeout=5,
+        import winreg
+        key = winreg.OpenKey(
+            winreg.HKEY_LOCAL_MACHINE,
+            r"HARDWARE\DESCRIPTION\System\CentralProcessor\0",
         )
-        for line in result.stdout.splitlines():
-            if line.startswith("Name="):
-                cpu_name = line.split("=", 1)[1].strip()
-                break
+        cpu_name = winreg.QueryValueEx(key, "ProcessorNameString")[0].strip()
+        winreg.CloseKey(key)
     except Exception:
         pass
     if not cpu_name:

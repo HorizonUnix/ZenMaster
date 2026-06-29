@@ -454,3 +454,11 @@ def get_supported_args(family: str) -> list[str]:
             seen.add(name)
             result.append(name)
     return result
+
+
+def all_known_args() -> frozenset[str]:
+    return frozenset(
+        name.lower()
+        for cmds in _SOCKET_COMMANDS.values()
+        for name, _, _ in cmds
+    )

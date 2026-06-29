@@ -7,7 +7,7 @@ import struct
 import sys
 import time
 
-from zenpy import runner, smu
+from zenpy import __version__, runner, smu
 from zenpy.apply import apply
 from zenpy.hardware import CpuInfo, detect
 from zenpy.table import read_table
@@ -144,7 +144,17 @@ def _is_root() -> bool:
     if platform.system() == "Windows":
         try:
             import ctypes
-            return bool(ctypes.windll.shell32.IsUserAnAdmin())
+            import ctypes.wintypes
+            k32  = ctypes.windll.kernel32
+            adv  = ctypes.windll.advapi32
+            tok  = ctypes.c_void_p()
+            if not adv.OpenProcessToken(k32.GetCurrentProcess(), 0x0008, ctypes.byref(tok)):
+                return bool(ctypes.windll.shell32.IsUserAnAdmin())
+            elevation = ctypes.c_uint(0)
+            size      = ctypes.c_uint(ctypes.sizeof(elevation))
+            ok = adv.GetTokenInformation(tok, 20, ctypes.byref(elevation), size, ctypes.byref(size))
+            k32.CloseHandle(tok)
+            return bool(elevation.value) if ok else False
         except Exception:
             return False
     return os.geteuid() == 0
@@ -153,55 +163,55 @@ def _is_root() -> bool:
 def _show_help(info: CpuInfo) -> None:
     supported = set(runner.get_supported_args(info.family))
     socket = runner.get_socket(info.family) or "unknown"
-    print(f"ZenPy — AMD Ryzen power tuning")
-    print(f"  CPU    : {info.name}")
-    print(f"  Family : {info.family}  ({info.arch})")
-    print(f"  Socket : {socket}")
+    print(f"ZenPy — Ryzen Power Management Tool")
     print()
     print("Usage: zenpy [OPTIONS] [TUNING ARGS...]")
     print()
     print("Options:")
-    print("  --info           Show CPU and backend info (no root needed)")
+    print("  --info           Show CPU and backend info")
     print("  --json           Machine-readable JSON output")
     print("  --reapply=N      Re-apply settings every N seconds (foreground)")
     if smu.pm_table_supported(info.family):
-        print("  --table          Show labeled power metrics table (like ryzenadj --info)")
+        print("  --table          Show labeled power metrics table")
         print("  --dump-table     Dump raw PM table floats with hex offsets")
     print()
 
     if not supported:
         print(f"No SMU support found for family '{info.family}'.")
-        return
+    else:
+        print(f"Tuning arguments for {info.name} ({info.family}, {socket}):")
+        shown: set[str] = set()
+        for category, args in _CATEGORIES.items():
+            in_category = [a for a in args if a in supported and a not in shown]
+            if not in_category:
+                continue
+            print(f"\n  {category}:")
+            for arg in in_category:
+                unit = _ARG_UNITS.get(arg, "")
+                unit_str = f"<{unit}>" if unit else "<value>"
+                left = f"--{arg}={unit_str}"
+                desc = _ARG_DESCS.get(arg, "Unknown command")
+                print(f"    {left:<38} {desc}")
+                shown.add(arg)
 
-    print("Tuning arguments (this CPU only):")
-    shown: set[str] = set()
-    for category, args in _CATEGORIES.items():
-        in_category = [a for a in args if a in supported and a not in shown]
-        if not in_category:
-            continue
-        print(f"\n  {category}:")
-        for arg in in_category:
-            unit = _ARG_UNITS.get(arg, "")
-            unit_str = f"<{unit}>" if unit else "<value>"
-            left = f"--{arg}={unit_str}"
-            desc = _ARG_DESCS.get(arg, "Unknown command")
-            print(f"    {left:<38} {desc}")
-            shown.add(arg)
+        uncategorised = [a for a in runner.get_supported_args(info.family) if a not in shown]
+        if uncategorised:
+            print("\n  Other:")
+            for arg in uncategorised:
+                left = f"--{arg}=<value>"
+                desc = _ARG_DESCS.get(arg, "Unknown command")
+                print(f"    {left:<38} {desc}")
 
-    uncategorised = [a for a in runner.get_supported_args(info.family) if a not in shown]
-    if uncategorised:
-        print("\n  Other:")
-        for arg in uncategorised:
-            left = f"--{arg}=<value>"
-            desc = _ARG_DESCS.get(arg, "Unknown command")
-            print(f"    {left:<38} {desc}")
+    print()
+    print(f"WARNING: Use at your own risk!")
+    print(f"Version: {__version__}  |  By HorizonUnix  |  GPL-3.0")
 
 
 def _show_info(info: CpuInfo, backend: str | None, json_out: bool) -> None:
     socket = runner.get_socket(info.family) or "unknown"
     if json_out:
         print(json.dumps({
-            "cpu": info.name,
+            "name": info.name,
             "family": info.family,
             "arch": info.arch,
             "type": info.type,
@@ -211,7 +221,7 @@ def _show_info(info: CpuInfo, backend: str | None, json_out: bool) -> None:
             "cpu_model_int": info.cpu_model_int,
         }, indent=2))
     else:
-        print(f"CPU    : {info.name}")
+        print(f"Name   : {info.name}")
         print(f"Family : {info.family}  ({info.arch})")
         print(f"Type   : {info.type}")
         print(f"Socket : {socket}")
@@ -336,11 +346,23 @@ def main() -> None:
     if flags.info:
         try:
             backend = smu.init()
-        except RuntimeError:
-            pass
+        except RuntimeError as e:
+            if not flags.json_out:
+                print(f"ZenPy: backend unavailable: {e}", file=sys.stderr)
         _show_info(info, backend, flags.json_out)
         if not rest and not flags.dump_table and not flags.table:
             sys.exit(0)
+
+    if (flags.table or flags.dump_table or rest) and backend is None:
+        if not _is_root():
+            print("ZenPy: root/admin privileges required.", file=sys.stderr)
+            print("       Run with sudo (Linux) or as Administrator (Windows).", file=sys.stderr)
+            sys.exit(1)
+        try:
+            backend = smu.init()
+        except RuntimeError as e:
+            print(f"ZenPy: backend error: {e}", file=sys.stderr)
+            sys.exit(1)
 
     if flags.table:
         _show_table(flags.json_out, info.family)
@@ -353,19 +375,13 @@ def main() -> None:
             sys.exit(0)
 
     if rest:
-        if not _is_root():
-            print("ZenPy: root/admin privileges required.", file=sys.stderr)
-            print("       Run with sudo (Linux) or as Administrator (Windows).", file=sys.stderr)
-            sys.exit(1)
+        known = runner.all_known_args()
+        for token in rest:
+            name = token.lstrip("-").partition("=")[0].replace("_", "-").lower()
+            if name and name not in known:
+                _show_help(info)
+                sys.exit(0)
 
-        if backend is None:
-            try:
-                backend = smu.init()
-            except RuntimeError as e:
-                print(f"ZenPy: backend error: {e}", file=sys.stderr)
-                sys.exit(1)
-
-    if rest:
         if flags.reapply > 0 and flags.reapply < 1:
             print("ZenPy: --reapply minimum is 1 second", file=sys.stderr)
             sys.exit(1)
