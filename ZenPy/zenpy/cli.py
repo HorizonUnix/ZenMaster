@@ -382,10 +382,6 @@ def main() -> None:
                 _show_help(info)
                 sys.exit(0)
 
-        if flags.reapply > 0 and flags.reapply < 1:
-            print("ZenPy: --reapply minimum is 1 second", file=sys.stderr)
-            sys.exit(1)
-
         args_str = " ".join(rest)
         try:
             while True:

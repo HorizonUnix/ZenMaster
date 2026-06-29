@@ -408,6 +408,18 @@ _SOCKET_COMMANDS: dict[str, list[tuple[str, bool, int]]] = {
     SOCKET_AM5_V1:      _CMD_AM5_V1,
 }
 
+_LOOKUP: dict[str, dict[str, list[tuple[bool, int]]]] = {}
+for _s, _cmds in _SOCKET_COMMANDS.items():
+    _d: dict[str, list[tuple[bool, int]]] = {}
+    for _n, _m, _o in _cmds:
+        _d.setdefault(_n, []).append((_m, _o))
+    _LOOKUP[_s] = _d
+del _s, _cmds, _d, _n, _m, _o
+
+_ALL_KNOWN_ARGS: frozenset[str] = frozenset(
+    n for cmds in _SOCKET_COMMANDS.values() for n, _, _ in cmds
+)
+
 _SOCKET_SHORT: dict[str, str] = {
     SOCKET_AM4_V1:      "AM4",
     SOCKET_FT5_FP5_AM4: "FP5",
@@ -428,8 +440,8 @@ def get_socket_short(family: str) -> str:
 
 
 def has_smu_support(family: str) -> bool:
-    socket = get_socket(family)
-    return bool(socket and _SOCKET_COMMANDS.get(socket))
+    sock = _FAMILY_SOCKET.get(family)
+    return bool(sock and _LOOKUP.get(sock))
 
 
 def get_commands(family: str) -> list[tuple[str, bool, int]]:
@@ -438,27 +450,17 @@ def get_commands(family: str) -> list[tuple[str, bool, int]]:
 
 
 def lookup(family: str, arg_name: str) -> list[tuple[bool, int]]:
+    sock = _FAMILY_SOCKET.get(family)
+    if not sock:
+        return []
     norm = arg_name.lstrip("-").replace("_", "-").lower()
-    return [
-        (is_mp1, op)
-        for name, is_mp1, op in get_commands(family)
-        if name.lower() == norm
-    ]
+    return _LOOKUP.get(sock, {}).get(norm, [])
 
 
 def get_supported_args(family: str) -> list[str]:
-    seen: set[str] = set()
-    result: list[str] = []
-    for name, _, _ in get_commands(family):
-        if name not in seen:
-            seen.add(name)
-            result.append(name)
-    return result
+    sock = _FAMILY_SOCKET.get(family)
+    return list(_LOOKUP.get(sock, {}).keys()) if sock else []
 
 
 def all_known_args() -> frozenset[str]:
-    return frozenset(
-        name.lower()
-        for cmds in _SOCKET_COMMANDS.values()
-        for name, _, _ in cmds
-    )
+    return _ALL_KNOWN_ARGS

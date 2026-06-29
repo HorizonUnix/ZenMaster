@@ -1,6 +1,8 @@
 from __future__ import annotations
 import platform
 
+_IS_WINDOWS = platform.system() == "Windows"
+
 SMU_OK              = 0x01
 SMU_FAILED          = 0xFF
 SMU_UNKNOWN_CMD     = 0xFE
@@ -21,7 +23,7 @@ def status_name(code: int) -> str:
 
 
 def _backend():
-    if platform.system() == "Windows":
+    if _IS_WINDOWS:
         from zenpy import windows
         return windows
     from zenpy import linux

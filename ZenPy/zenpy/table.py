@@ -81,7 +81,6 @@ def _f(data: bytes, off: int | None) -> float:
 
 def read_table(data: bytes, ver: int) -> list[tuple[str, float, str]]:
     def f(off): return _f(data, off)
-    def fv(off): return f(off) if off is not None else math.nan
 
     if ver in _VRM_V1:
         vrm_cur, vrm_cur_val = 0x18, 0x1C
@@ -128,25 +127,25 @@ def read_table(data: bytes, ver: int) -> list[tuple[str, float, str]]:
         ("PPT VALUE FAST",     f(0x0C), ""),
         ("PPT LIMIT SLOW",     f(0x10), "slow-limit"),
         ("PPT VALUE SLOW",     f(0x14), ""),
-        ("StapmTimeConst",     fv(_STAPM_TIME.get(ver)), "stapm-time"),
-        ("SlowPPTTimeConst",   fv(_SLOW_TIME.get(ver)),  "slow-time"),
-        ("PPT LIMIT APU",      fv(apu_slow_lim),  "apu-slow-limit"),
-        ("PPT VALUE APU",      fv(apu_slow_val),  ""),
-        ("TDC LIMIT VDD",      fv(vrm_cur),       "vrm-current"),
-        ("TDC VALUE VDD",      fv(vrm_cur_val),   ""),
-        ("TDC LIMIT SOC",      fv(vrmsoc_cur),    "vrmsoc-current"),
-        ("TDC VALUE SOC",      fv(vrmsoc_cur_val),""),
-        ("EDC LIMIT VDD",      fv(vrmmax_cur),    "vrmmax-current"),
-        ("EDC VALUE VDD",      fv(vrmmax_cur_val),""),
-        ("EDC LIMIT SOC",      fv(vrmsocmax_cur), "vrmsocmax-current"),
-        ("EDC VALUE SOC",      fv(vrmsocmax_cur_val), ""),
-        ("THM LIMIT CORE",     fv(tctl),          "tctl-temp"),
-        ("THM VALUE CORE",     fv(tctl_val),      ""),
-        ("STT LIMIT APU",      fv(skin_apu_lim),  "apu-skin-temp"),
-        ("STT VALUE APU",      fv(skin_apu_val),  ""),
-        ("STT LIMIT dGPU",     fv(skin_dgpu_lim), "dgpu-skin-temp"),
-        ("STT VALUE dGPU",     fv(skin_dgpu_val), ""),
-        ("CCLK Boost SETPOINT",fv(_CCLK_SETPOINT.get(ver)), "power-saving /"),
-        ("CCLK BUSY VALUE",    fv(_CCLK_BUSY.get(ver)),     "max-performance"),
+        ("StapmTimeConst",     f(_STAPM_TIME.get(ver)), "stapm-time"),
+        ("SlowPPTTimeConst",   f(_SLOW_TIME.get(ver)),  "slow-time"),
+        ("PPT LIMIT APU",      f(apu_slow_lim),  "apu-slow-limit"),
+        ("PPT VALUE APU",      f(apu_slow_val),  ""),
+        ("TDC LIMIT VDD",      f(vrm_cur),       "vrm-current"),
+        ("TDC VALUE VDD",      f(vrm_cur_val),   ""),
+        ("TDC LIMIT SOC",      f(vrmsoc_cur),    "vrmsoc-current"),
+        ("TDC VALUE SOC",      f(vrmsoc_cur_val),""),
+        ("EDC LIMIT VDD",      f(vrmmax_cur),    "vrmmax-current"),
+        ("EDC VALUE VDD",      f(vrmmax_cur_val),""),
+        ("EDC LIMIT SOC",      f(vrmsocmax_cur), "vrmsocmax-current"),
+        ("EDC VALUE SOC",      f(vrmsocmax_cur_val), ""),
+        ("THM LIMIT CORE",     f(tctl),          "tctl-temp"),
+        ("THM VALUE CORE",     f(tctl_val),      ""),
+        ("STT LIMIT APU",      f(skin_apu_lim),  "apu-skin-temp"),
+        ("STT VALUE APU",      f(skin_apu_val),  ""),
+        ("STT LIMIT dGPU",     f(skin_dgpu_lim), "dgpu-skin-temp"),
+        ("STT VALUE dGPU",     f(skin_dgpu_val), ""),
+        ("CCLK Boost SETPOINT",f(_CCLK_SETPOINT.get(ver)), "power-saving /"),
+        ("CCLK BUSY VALUE",    f(_CCLK_BUSY.get(ver)),     "max-performance"),
     ]
     return [(label, val, flag) for label, val, flag in rows if not math.isnan(val)]

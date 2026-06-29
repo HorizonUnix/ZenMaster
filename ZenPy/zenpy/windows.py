@@ -1,7 +1,10 @@
 from __future__ import annotations
+import ctypes
+import ctypes.wintypes
 import os
 import struct
 import threading
+import time
 
 SMU_OK              = 0x01
 SMU_FAILED          = 0xFF
@@ -13,16 +16,16 @@ _DEVICE_PATHS = [
     r"\\?\GLOBALROOT\Device\PawnIO",
     r"\\.\PawnIO",
 ]
-_FN_NAME_LEN = 32
 _IOCTL_LOAD  = 0xA1B22084
 _IOCTL_EXEC  = 0xA1B22104
 _NARGS       = 6
 _POLL_N      = 8192
 _lock        = threading.Lock()
 _handle      = None
+_k32         = None
 
 _PM_TABLE_FAMILIES = {
-    "Renoir", "Lucienne", "Cezanne", "Rembrandt",
+    "Renoir", "Lucienne", "Cezanne_Barcelo", "Rembrandt",
     "PhoenixPoint", "PhoenixPoint2", "HawkPoint", "HawkPoint2",
     "SonomaValley", "StrixPoint", "KrackanPoint", "KrackanPoint2", "StrixHalo",
 }
@@ -85,7 +88,6 @@ _RSMU: dict[str, tuple[int, int, int]] = {
 }
 _RSMU_DEFAULT = (0x3B10A20, 0x3B10A80, 0x3B10A88)
 
-
 _PAWNIO_INSTALLER_URL = "https://github.com/namazso/PawnIO.Setup/releases/latest/download/PawnIO_setup.exe"
 
 
@@ -93,42 +95,28 @@ def _assets_dir() -> str:
     return os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets")
 
 
-def _pawnio_installed() -> bool:
-    try:
-        import winreg
-        winreg.OpenKey(
-            winreg.HKEY_LOCAL_MACHINE,
-            r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\PawnIO",
-        )
-        return True
-    except OSError:
-        return False
-
-
-def _pawnio_version() -> str | None:
+def _pawnio_info() -> str | None:
     try:
         import winreg
         key = winreg.OpenKey(
             winreg.HKEY_LOCAL_MACHINE,
             r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\PawnIO",
         )
-        return winreg.QueryValueEx(key, "DisplayVersion")[0]
+        try:
+            return winreg.QueryValueEx(key, "DisplayVersion")[0]
+        except OSError:
+            return ""
     except OSError:
         return None
 
 
-def _setup_k32():
-    import ctypes
-    import ctypes.wintypes
+def _make_k32():
     k32    = ctypes.windll.kernel32
     HANDLE = ctypes.wintypes.HANDLE
     DWORD  = ctypes.wintypes.DWORD
     BOOL   = ctypes.wintypes.BOOL
-
     k32.CreateFileW.restype  = HANDLE
-    k32.CreateFileW.argtypes = [
-        ctypes.c_wchar_p, DWORD, DWORD, ctypes.c_void_p, DWORD, DWORD, HANDLE,
-    ]
+    k32.CreateFileW.argtypes = [ctypes.c_wchar_p, DWORD, DWORD, ctypes.c_void_p, DWORD, DWORD, HANDLE]
     k32.DeviceIoControl.restype  = BOOL
     k32.DeviceIoControl.argtypes = [
         HANDLE, DWORD, ctypes.c_void_p, DWORD,
@@ -136,37 +124,37 @@ def _setup_k32():
     ]
     k32.CloseHandle.restype  = BOOL
     k32.CloseHandle.argtypes = [HANDLE]
+    k32.GetLastError.restype  = DWORD
+    k32.GetLastError.argtypes = []
     return k32
 
 
-def _open_device():
-    import ctypes
-    k32 = _setup_k32()
-    invalid = ctypes.wintypes.HANDLE(-1).value
+def _open_device(k32):
+    invalid = ctypes.c_void_p(-1).value
     for path in _DEVICE_PATHS:
         h = k32.CreateFileW(path, 0xC0000000, 0x3, None, 3, 0, None)
         if h is not None and h != 0 and h != invalid:
-            return k32, h
-    return k32, None
+            return h
+    return None
 
 
 def init() -> str:
-    global _handle
-    import ctypes
-    import ctypes.wintypes
+    global _handle, _k32
 
     module_path = os.path.join(_assets_dir(), "AMD", "PawnIO", "RyzenSMU.bin")
     if not os.path.exists(module_path):
         raise RuntimeError(f"PawnIO module not found: {module_path}")
 
-    if not _pawnio_installed():
+    ver = _pawnio_info()
+    if ver is None:
         raise RuntimeError(
             "PawnIO driver is not installed.\n"
             f"Download and run the installer: {_PAWNIO_INSTALLER_URL}\n"
             "After installation, reboot and run ZenPy again."
         )
 
-    k32, handle = _open_device()
+    k32    = _make_k32()
+    handle = _open_device(k32)
     if handle is None:
         raise RuntimeError(
             "PawnIO device not found — driver may need a reboot to activate.\n"
@@ -187,7 +175,6 @@ def init() -> str:
     if not ok:
         err = k32.GetLastError()
         k32.CloseHandle(handle)
-        ver = _pawnio_version()
         ver_str = f" (PawnIO v{ver})" if ver else ""
         raise RuntimeError(
             f"PawnIO LoadBinary failed (error {err}){ver_str}\n"
@@ -196,6 +183,7 @@ def init() -> str:
         )
 
     _handle = handle
+    _k32    = k32
     return "pawnio"
 
 
@@ -204,10 +192,6 @@ def active_backend() -> str | None:
 
 
 def _execute(fn_name: str, in_args: list[int], out_count: int) -> list[int]:
-    import ctypes
-    import ctypes.wintypes
-    k32 = _setup_k32()
-
     name_buf = struct.pack("32s", fn_name.encode("ascii")[:31])
     args_buf = struct.pack(f"<{len(in_args)}q", *in_args) if in_args else b""
     payload  = name_buf + args_buf
@@ -216,7 +200,7 @@ def _execute(fn_name: str, in_args: list[int], out_count: int) -> list[int]:
     out_sz   = out_count * 8 if out_count else 0
     ret      = ctypes.wintypes.DWORD(0)
 
-    ok = k32.DeviceIoControl(
+    ok = _k32.DeviceIoControl(
         ctypes.wintypes.HANDLE(_handle),
         ctypes.wintypes.DWORD(_IOCTL_EXEC),
         ctypes.cast(in_buf, ctypes.c_void_p),
@@ -266,7 +250,7 @@ def _mailbox_query(msg: int, rsp: int, args_base: int, op: int) -> tuple[int, li
 
 
 def _read_physical_memory(phys_addr: int, size: int) -> bytes | None:
-    n = (size + 7) // 8
+    n   = (size + 7) // 8
     raw = _execute("ioctl_read_pm_table", [phys_addr, n], n)
     if raw and any(raw):
         return struct.pack(f"<{len(raw)}q", *raw)[:size]
@@ -301,7 +285,6 @@ def read_pm_table_version(family: str = "") -> int:
 
 
 def read_pm_table(family: str = "") -> bytes | None:
-    import time
     if not _handle or family not in _PM_TABLE_FAMILIES:
         return None
     msg, rsp, args_base = _RSMU.get(family, _RSMU_DEFAULT)
