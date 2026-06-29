@@ -224,7 +224,7 @@ def _execute(fn_name: str, in_args: list[int], out_count: int) -> list[int]:
     if not ok or ret.value == 0 or out_count == 0:
         return []
     count = min(ret.value // 8, out_count)
-    return list(struct.unpack(f"<{count}q", out_buf.raw[: count * 8])) + [0] * (out_count - count)
+    return list(struct.unpack(f"<{count}q", out_buf.raw[: count * 8]))
 
 
 def _smn_read(addr: int) -> int:
