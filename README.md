@@ -7,7 +7,7 @@
 
 ## Overview
 
-ZenMaster adjusts power management settings for AMD Ryzen CPUs and APUs on Linux and Windows. It uses the same CLI as [RyzenAdj](https://github.com/FlyGoat/RyzenAdj), so your existing commands and presets keep working, but you install it with `pip` and never need a compiler. Set power limits, temperature limits, VRM currents, clocks, voltages and Curve Optimiser offsets without touching the BIOS.
+ZenMaster adjusts power management settings for AMD Ryzen CPUs and APUs on Linux and Windows. It uses the same CLI as [RyzenAdj](https://github.com/FlyGoat/RyzenAdj), so your existing commands and presets keep working, but you install it with `pip` and never need a compiler. Set power limits, temperature limits, VRM currents, clocks, voltages and Curve Optimizer offsets without touching the BIOS.
 
 ```bash
 pip install zenmaster

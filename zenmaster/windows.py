@@ -136,7 +136,7 @@ def active_backend() -> str | None:
 
 def _execute(fn_name: str, in_args: list[int], out_count: int) -> list[int]:
     if _handle is None or _k32 is None:
-        raise SMUNotInitialized("PawnIO not initialised — call smu.init() first")
+        raise SMUNotInitialized("PawnIO not initialized — call smu.init() first")
     fn_bytes = fn_name.encode("ascii")[:31]
     name_buf = struct.pack("32s", fn_bytes)
     args_buf = struct.pack(f"<{len(in_args)}q", *in_args) if in_args else b""

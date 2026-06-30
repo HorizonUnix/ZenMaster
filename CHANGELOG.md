@@ -40,8 +40,8 @@
   when passed without `=value`, instead of silently sending 0
 - `apply()` results always include a consistent set of keys (`error` is
   `None` on success), making the return shape stable for consumers
-- Argument names are normalised to lowercase/hyphen form in `apply()` results
-- Modernised packaging to PEP 639 SPDX license metadata
+- Argument names are normalized to lowercase/hyphen form in `apply()` results
+- Modernized packaging to PEP 639 SPDX license metadata
 
 ### Fixed
 - Windows PM table read now aborts if the final table-transfer retry is still
@@ -51,7 +51,7 @@
 - `--skin-temp-limit` (a power limit in mW) is no longer multiplied by 256;
   only the temperature args `apu-skin-temp` and `dgpu-skin-temp` are scaled,
   matching RyzenAdj
-- Negative values (e.g. Curve Optimiser `--set-coall=-20`) now wrap to
+- Negative values (e.g. Curve Optimizer `--set-coall=-20`) now wrap to
   unsigned 32-bit like RyzenAdj, instead of being clamped to 0
 - Flag args (`--max-performance`, `--enable-oc`, …) always send 0, ignoring any
   value passed, matching RyzenAdj's boolean handling

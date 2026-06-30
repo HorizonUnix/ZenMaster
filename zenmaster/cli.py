@@ -112,9 +112,9 @@ _ARG_DESCS: dict[str, str] = {
     "disable-oc":                "Disable overclocking mode (Renoir and up)",
     "oc-volt":                   "Forced core VID: (1.55 − target_V) / 0.00625 (Renoir and up)",
     "pbo-scalar":                "Precision Boost Overdrive scalar",
-    "set-coall":                 "All-core Curve Optimiser offset",
-    "set-coper":                 "Per-core Curve Optimiser offset",
-    "set-cogfx":                 "iGPU Curve Optimiser offset",
+    "set-coall":                 "All-core Curve Optimizer offset",
+    "set-coper":                 "Per-core Curve Optimizer offset",
+    "set-cogfx":                 "iGPU Curve Optimizer offset",
     "set-gpuclockoverdrive-byvid": "Set GPU clock overdrive by VID",
     "power-saving":              "Apply power-saving profile (AC-unplugged behavior)",
     "max-performance":           "Apply max-performance profile (AC-plugged behavior)",
@@ -134,8 +134,8 @@ _ARG_DESCS: dict[str, str] = {
     "get-pbo-fused-vrmtdc-limit":       "Query PBO fused VRM TDC current limit",
     "get-pbo-fused-vrmsoc-current":     "Query PBO fused VRM SoC current",
     "get-pbo-fused-tctl-temp":          "Query PBO fused Tctl temperature",
-    "get-coper-options":                "Query available per-core Curve Optimiser options",
-    "get-cogfx-options":                "Query available iGPU Curve Optimiser options",
+    "get-coper-options":                "Query available per-core Curve Optimizer options",
+    "get-cogfx-options":                "Query available iGPU Curve Optimizer options",
     "disable-prochot":                  "Disable PROCHOT thermal throttle signal",
     "set-fll-btc-enable":               "Enable FLL BTC mode",
     "set-vddoff-vid":                   "Set VDD-off VID",
@@ -258,7 +258,7 @@ def _show_info(info: CpuInfo, backend: str | None, json_out: bool) -> None:
         print(f"Family : {info.family}  ({info.arch})")
         print(f"Type   : {info.type}")
         print(f"Socket : {socket}")
-        print(f"Backend: {backend or 'not initialised'}")
+        print(f"Backend: {backend or 'not initialized'}")
 
 
 def _format_results(results: list[dict], info: CpuInfo, backend: str | None,

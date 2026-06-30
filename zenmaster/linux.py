@@ -161,7 +161,7 @@ def _send_seq(write, read, fd: int, msg: int, rsp: int, args: int, op: int, arg0
 
 def _backend_io() -> tuple:
     if _backend is None:
-        raise SMUNotInitialized("SMU not initialised — call smu.init() first")
+        raise SMUNotInitialized("SMU not initialized — call smu.init() first")
     if _backend == "ryzen_smu":
         return _smn_write, _smn_read, SMN_PATH
     return _pci_write, _pci_read, PCI_CONFIG
