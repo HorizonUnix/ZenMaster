@@ -170,19 +170,23 @@ def _smn_write(addr: int, value: int) -> None:
     _execute("ioctl_write_smu_register", [addr, value], 0)
 
 
-def _mailbox_send(msg: int, rsp: int, args_addr: int, op: int, arg0: int) -> int:
-    _smn_write(rsp, 0)
-    _smn_write(args_addr, arg0)
-    for i in range(1, NARGS):
-        _smn_write(args_addr + i * 4, 0)
-    _smn_write(msg, op)
+def _poll_response(rsp: int) -> int:
     for i in range(_POLL_N):
         r = _smn_read(rsp)
         if r:
             return r
         if i >= _FAST_POLL:
             time.sleep(_POLL_SLEEP)
-    return SMU_FAILED
+    return 0
+
+
+def _mailbox_send(msg: int, rsp: int, args_addr: int, op: int, arg0: int) -> int:
+    _smn_write(rsp, 0)
+    _smn_write(args_addr, arg0)
+    for i in range(1, NARGS):
+        _smn_write(args_addr + i * 4, 0)
+    _smn_write(msg, op)
+    return _poll_response(rsp) or SMU_FAILED
 
 
 def _mailbox_query(msg: int, rsp: int, args_base: int, op: int, arg0: int = 0) -> tuple[int, list[int]]:
@@ -192,12 +196,9 @@ def _mailbox_query(msg: int, rsp: int, args_base: int, op: int, arg0: int = 0) -
     if arg0:
         _smn_write(args_base, arg0)
     _smn_write(msg, op)
-    for i in range(_POLL_N):
-        r = _smn_read(rsp)
-        if r:
-            return r, [_smn_read(args_base + i * 4) for i in range(NARGS)]
-        if i >= _FAST_POLL:
-            time.sleep(_POLL_SLEEP)
+    r = _poll_response(rsp)
+    if r:
+        return r, [_smn_read(args_base + i * 4) for i in range(NARGS)]
     return SMU_FAILED, [0] * NARGS
 
 
