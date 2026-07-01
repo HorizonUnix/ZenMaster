@@ -68,6 +68,33 @@ def _parse_processor_identifier() -> tuple[int, int, str]:
     return cpu_family, cpu_model, cpu_name
 
 
+def _sysctl_str(name: str) -> str:
+    import ctypes
+    libc = ctypes.CDLL("/usr/lib/libSystem.B.dylib")
+    size = ctypes.c_size_t(0)
+    if libc.sysctlbyname(name.encode(), None, ctypes.byref(size), None, 0) != 0:
+        return ""
+    buf = ctypes.create_string_buffer(size.value)
+    if libc.sysctlbyname(name.encode(), buf, ctypes.byref(size), None, 0) != 0:
+        return ""
+    return buf.value.decode(errors="replace").strip()
+
+
+def _sysctl_int(name: str) -> int:
+    import ctypes
+    libc = ctypes.CDLL("/usr/lib/libSystem.B.dylib")
+    val  = ctypes.c_uint64(0)
+    size = ctypes.c_size_t(ctypes.sizeof(val))
+    if libc.sysctlbyname(name.encode(), ctypes.byref(val), ctypes.byref(size), None, 0) != 0:
+        return 0
+    return int(val.value)
+
+
+def _parse_sysctl() -> tuple[int, int, str]:
+    name = _sysctl_str("machdep.cpu.brand_string")
+    return _sysctl_int("machdep.cpu.family"), _sysctl_int("machdep.cpu.model"), name
+
+
 def _resolve_codename(cpu_name: str, cpu_family: int, cpu_model: int) -> tuple[str, str]:
     if "Intel" in cpu_name:
         return "Intel", "Intel"
@@ -141,8 +168,11 @@ def resolve(name: str, cpu_family_int: int, cpu_model_int: int) -> CpuInfo:
 
 
 def detect() -> CpuInfo:
-    if platform.system() == "Windows":
+    system = platform.system()
+    if system == "Windows":
         cpu_family_int, cpu_model_int, name = _parse_processor_identifier()
+    elif system == "Darwin":
+        cpu_family_int, cpu_model_int, name = _parse_sysctl()
     else:
         cpu_family_int, cpu_model_int, name = _parse_cpuinfo()
     return resolve(name, cpu_family_int, cpu_model_int)

@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from enum import IntEnum
 
 _IS_WINDOWS = platform.system() == "Windows"
+_IS_MACOS   = platform.system() == "Darwin"
 
 
 @dataclass
@@ -45,6 +46,9 @@ def _backend():
     if _IS_WINDOWS:
         from zenmaster import windows
         return windows
+    if _IS_MACOS:
+        from zenmaster import macos
+        return macos
     from zenmaster import linux
     return linux
 

@@ -190,6 +190,8 @@ def _show_help(info: CpuInfo) -> None:
     print("  --json           Machine-readable JSON output")
     print("  --reapply=N      Re-apply settings every N seconds (foreground)")
     print("  --version        Show version and check PyPI for a newer release")
+    if platform.system() == "Darwin":
+        print("  --iopci          Force the kext-free IOPCIBridge path (tuning only)")
     if smu.pm_table_supported(info.family):
         print("  --table          Show labeled power metrics table")
         print("  --sensors        Show key live sensors (temp, load, power, clocks)")
@@ -260,31 +262,34 @@ def _driver_line(backend: str | None) -> str:
 def _show_info(info: CpuInfo, backend: str | None, json_out: bool) -> None:
     socket = runner.get_socket(info.family) or "unknown"
     if json_out:
-        st = smu.module_status()
-        print(json.dumps({
+        out = {
             "name": info.name,
             "family": info.family,
             "arch": info.arch,
             "type": info.type,
             "socket": socket,
-            "backend": backend,
-            "driver": {
+            "cpu_family_int": info.cpu_family_int,
+            "cpu_model_int": info.cpu_model_int,
+        }
+        if backend is not None:
+            st = smu.module_status()
+            out["backend"] = backend
+            out["driver"] = {
                 "name": smu.driver_name(),
                 "version": st.version,
                 "min_version": st.min_version,
                 "ok": st.ok,
                 "reason": st.reason,
-            },
-            "cpu_family_int": info.cpu_family_int,
-            "cpu_model_int": info.cpu_model_int,
-        }, indent=2))
+            }
+        print(json.dumps(out, indent=2))
     else:
         print(f"Name   : {info.name}")
         print(f"Family : {info.family}  ({info.arch})")
         print(f"Type   : {info.type}")
         print(f"Socket : {socket}")
-        print(f"Backend: {backend or 'not initialized'}")
-        print(f"Driver : {_driver_line(backend)}")
+        if backend is not None:
+            print(f"Backend: {backend}")
+            print(f"Driver : {_driver_line(backend)}")
 
 
 def _format_results(results: list[dict], info: CpuInfo, backend: str | None,
@@ -328,9 +333,20 @@ def _format_results(results: list[dict], info: CpuInfo, backend: str | None,
         return "\n".join(lines)
 
 
+def _pm_unavailable_msg(family: str = "") -> str:
+    if platform.system() == "Darwin" and smu.active_backend() == "iopci":
+        return (
+            "--table, --dump-table and --sensors read the PM table, which is only "
+            "available through DirectHW.kext.\n"
+            "Install and load DirectHW for sensors; the kext-free IOPCIBridge path "
+            "supports tuning only."
+        )
+    return "PM table not available on this platform/family"
+
+
 def _require_pm_table(json_out: bool, family: str = "") -> bytes:
     if not smu.pm_table_supported(family):
-        msg = "PM table not available on this platform/family"
+        msg = _pm_unavailable_msg(family)
         if json_out:
             print(json.dumps({"error": msg}))
         else:
@@ -382,7 +398,7 @@ _SENSOR_ROWS = [
 def _show_sensors(json_out: bool, family: str = "") -> None:
     sensors = smu.read_pm_sensors(family)
     if sensors is None:
-        msg = "PM table not available on this platform/family"
+        msg = _pm_unavailable_msg(family)
         if json_out:
             print(json.dumps({"error": msg}))
         else:
@@ -432,7 +448,12 @@ def main() -> None:
     p.add_argument("--table",        action="store_true")
     p.add_argument("--sensors",      action="store_true")
     p.add_argument("--version",      action="store_true")
+    p.add_argument("--iopci",        action="store_true")
     flags, rest = p.parse_known_args(argv)
+
+    if flags.iopci and platform.system() == "Darwin":
+        from zenmaster import macos
+        macos.force_iopci()
 
     if flags.version:
         _show_update(flags.json_out)
@@ -470,7 +491,7 @@ def main() -> None:
     if (flags.table or flags.dump_table or flags.sensors or rest) and backend is None:
         if not _is_root():
             print("ZenMaster: root/admin privileges required.", file=sys.stderr)
-            print("Run with sudo (Linux) or as Administrator (Windows).", file=sys.stderr)
+            print("Run with sudo (Linux/macOS) or as Administrator (Windows).", file=sys.stderr)
             sys.exit(1)
         try:
             backend = smu.init()

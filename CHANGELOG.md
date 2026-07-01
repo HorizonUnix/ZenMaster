@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.5.0] - 2026-07-01
+
+### Added
+- macOS backend (AMD Hackintosh): CPU detection via `sysctl`, and SMU access through DirectHW.kext, with a kext-free fallback over IOPCIBridge (tuning only, no PM table)
+- CLI `--iopci` (macOS only) forces the IOPCIBridge path instead of DirectHW
+- `zenmaster.hardware.detect()` reads `machdep.cpu.family` / `machdep.cpu.model` / `machdep.cpu.brand_string` on macOS instead of `/proc/cpuinfo`
+
+### Changed
+- `--info` (text and `--json`) omits the `Backend`/`Driver` fields entirely when the SMU hasn't been initialized, instead of printing "not initialized"
+- `--table`, `--dump-table`, and `--sensors` point to DirectHW.kext specifically when they fail on the IOPCIBridge path, instead of a generic "not available" message
+
 ## [0.4.0] - 2026-06-30
 
 ### Added
