@@ -14,6 +14,9 @@ pip install zenmaster
 sudo zenmaster --stapm-limit=15000 --fast-limit=20000 --tctl-temp=90
 ```
 
+> [!NOTE]
+> There is a GUI version of ZenMaster called [ZenTune](https://github.com/HorizonUnix/ZenTune) that supports macOS and Linux.
+
 What you get over RyzenAdj itself:
 
 - No cmake, no libpci, no build step. `pip install` and you're done.
