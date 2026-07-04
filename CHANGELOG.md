@@ -1,5 +1,46 @@
 # Changelog
 
+## [1.0.0] - 2026-07-04
+
+ZenMaster is stable. The public API is frozen going forward. Here's everything it does at this point.
+
+### Cross-platform SMU access
+- Linux: PCI direct access with no kernel module needed on most systems; `ryzen_smu` when Secure Boot is on, with version checking (`>= 0.1.7`) and Secure Boot detection
+- Windows: PawnIO, a modern Microsoft-signed driver, instead of RyzenAdj's WinRing0 (which has known CVEs)
+- macOS (AMD Hackintosh): DirectHW.kext, or a kext-free fallback through IOKit's `IOPCIBridge` (tuning only, no PM table), forced with `--iopci`
+- One shared mailbox protocol (`mailbox.py`) underneath all three: MP1 and RSMU channels, per-family register addresses, retry-on-busy handling
+
+### CPU support
+- Summit Ridge (Zen 1) through Ryzen 9000 and Strix Halo, APU and desktop
+- `detect()` reads the real CPU (`/proc/cpuinfo`, `PROCESSOR_IDENTIFIER`, or `sysctl`) into a `CpuInfo`; `resolve()` builds one from explicit family/model values without touching hardware
+- Family-to-socket-to-opcode-table dispatch, so `--help` and `runner.get_supported_args()` only ever show what your specific CPU actually has
+
+### CLI
+- Same `--name=value` argument names and semantics as RyzenAdj, existing scripts and presets work unmodified
+- `--info` / `--info --json`: CPU, socket, backend, and driver status
+- `--table` / `--dump-table`: labeled or raw PM table dump
+- `--sensors`: compact live readout (temp, load, socket power, iGPU clock/temp, memory clock)
+- `--reapply=N`: keep re-applying a preset every N seconds in the foreground
+- `--version`: installed version, plus a PyPI check for a newer release
+- `--iopci` (macOS only): force the kext-free path
+- `--json` on every read-oriented flag, for scripting
+
+### Library API
+- `apply()` / `ApplyResult`, `detect()` / `resolve()` / `CpuInfo`, and the full `smu` surface (`init`, `close`, `ensure_backend`, `send_mp1`/`send_rsmu`/`query_mp1`/`query_rsmu`, `read_pm_table`/`read_pm_table_version`/`read_pm_table_full`, `module_status`, `secure_boot_enabled`, `is_available`, `driver_name`, `active_backend`, `unavailable_reason`, `send_arg`) are all re-exported at the top level, `import zenmaster` gets you everything without reaching into submodules
+- `table.read_sensors()` / `PmSensors` for decoding PM table bytes you already have; `check_update()` for the same version check the CLI does
+- Typed exception hierarchy: `ZenMasterError` (a `RuntimeError`) with `BackendUnavailable`, `SMUNotInitialized`, `UnsupportedCPU`; `BackendUnavailable` messages link straight to the wiki's Installation guide
+- `py.typed` ships in the package, so type checkers see real signatures
+
+### PM table and sensors
+- Labeled table decoding across every VRM (v1/v2/v3) and Tctl (v1/v2) layout AMD has shipped, covering Raven/Picasso-era APUs through current parts
+- One mailbox round trip per read: `read_pm_table_full()` fetches version, address, and data together, and `read_pm_table()` / `read_pm_table_version()` / `read_pm_sensors()` all call into it instead of each redoing the sequence
+
+### Packaging and quality
+- Zero mandatory third-party dependencies, on any platform
+- `pip install zenmaster`, no cmake, no libpci, no build step
+- Test suite covering every backend (Linux, Windows, macOS) and module
+- GPL-3.0 licensed; full wiki documentation (Installation, CLI Usage, Tuning Arguments, PM Table and Monitoring, Library API, architecture, troubleshooting, FAQ)
+
 ## [0.6.0] - 2026-07-02
 
 ### Added

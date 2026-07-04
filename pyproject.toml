@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "zenmaster"
-version = "0.6.0"
+version = "1.0.0"
 requires-python = ">=3.10"
 description = "Adjust power management settings for Ryzen CPUs on Linux, Windows, and macOS"
 readme = "README.md"
@@ -13,7 +13,7 @@ license-files = ["LICENSE"]
 authors = [{ name = "oxGorou", email = "lekhanhbinh2901@gmail.com" }]
 keywords = ["amd", "ryzen", "ryzenadj", "smu", "power-management", "tuning"]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Environment :: Console",
     "Intended Audience :: End Users/Desktop",
     "Intended Audience :: Developers",
