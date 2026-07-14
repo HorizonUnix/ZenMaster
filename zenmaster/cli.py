@@ -27,7 +27,7 @@ _CATEGORIES: dict[str, list[str]] = {
                         "gfx-clk", "max-socclk-frequency", "min-socclk-frequency",
                         "max-fclk-frequency", "min-fclk-frequency",
                         "max-vcn", "min-vcn", "max-lclk", "min-lclk",
-                        "oc-clk", "per-core-oc-clk", "set-boost-limit-frequency",
+                        "oc-clk", "oc-clk-per-core", "set-boost-limit-frequency",
                         "set-vmin-freq"],
     "Overclocking":    ["enable-oc", "disable-oc", "oc-volt", "pbo-scalar",
                         "set-coall", "set-coper", "set-cogfx",
@@ -58,7 +58,7 @@ _ARG_UNITS: dict[str, str] = {
     "vrmsocmax-current": "mA", "vrmcvip-current": "mA", "vrmgfx-current": "mA", "vrmgfxmax-current": "mA",
     "psi0-current": "mA", "psi0soc-current": "mA",
     "psi3cpu-current": "mA", "psi3gfx-current": "mA",
-    "oc-clk": "MHz", "per-core-oc-clk": "MHz", "max-cpuclk": "MHz",
+    "oc-clk": "MHz", "oc-clk-per-core": "MHz", "max-cpuclk": "MHz",
     "min-cpuclk": "MHz", "max-gfxclk": "MHz", "min-gfxclk": "MHz",
     "gfx-clk": "MHz", "max-socclk-frequency": "MHz", "min-socclk-frequency": "MHz",
     "max-fclk-frequency": "MHz", "min-fclk-frequency": "MHz",
@@ -106,7 +106,7 @@ _ARG_DESCS: dict[str, str] = {
     "max-lclk":                  "Maximum Data Launch Clock frequency",
     "min-lclk":                  "Minimum Data Launch Clock frequency",
     "oc-clk":                    "Forced all-core clock speed (Renoir and up)",
-    "per-core-oc-clk":           "Forced per-core clock speed (Renoir and up)",
+    "oc-clk-per-core":           "Forced per-core clock speed (Renoir and up)",
     "set-boost-limit-frequency": "Boost frequency ceiling",
     "set-vmin-freq":             "Minimum voltage frequency floor",
     "enable-oc":                 "Enable overclocking mode (Renoir and up)",
@@ -261,6 +261,15 @@ def _driver_line(backend: str | None) -> str:
 
 def _show_info(info: CpuInfo, backend: str | None, json_out: bool) -> None:
     socket = runner.get_socket(info.family) or "unknown"
+    bios_ver = 0
+    smu_ver = 0
+    if backend is not None:
+        try:
+            bios_ver = smu.get_bios_if_ver(info.family)
+            smu_ver = smu.get_smu_version(info.family)
+        except Exception:
+            pass
+
     if json_out:
         out = {
             "name": info.name,
@@ -282,6 +291,11 @@ def _show_info(info: CpuInfo, backend: str | None, json_out: bool) -> None:
                 "ok": st.ok,
                 "reason": st.reason,
             }
+            if bios_ver:
+                out["bios_if_version"] = bios_ver
+            if smu_ver:
+                out["smu_version"] = smu.format_smu_version(smu_ver)
+                out["smu_version_hex"] = f"0x{smu_ver:08X}"
         print(json.dumps(out, indent=2))
     else:
         print(f"Name   : {info.name}")
@@ -291,6 +305,10 @@ def _show_info(info: CpuInfo, backend: str | None, json_out: bool) -> None:
         if backend is not None:
             print(f"Backend: {backend}")
             print(f"Driver : {_driver_line(backend)}")
+            if bios_ver:
+                print(f"SMU BIOS IF: {bios_ver}")
+            if smu_ver:
+                print(f"SMU Version: {smu.format_smu_version(smu_ver)} (0x{smu_ver:08X})")
 
 
 def _format_results(results: list[dict], info: CpuInfo, backend: str | None,
@@ -377,7 +395,10 @@ def _show_table(json_out: bool, family: str = "") -> None:
     else:
         print(f"PM Table Version: 0x{ver:08X}")
         fmt = "| {:<21} | {:>9.3f} | {:<20} |"
+        hdr_fmt = "| {:^21} | {:^9} | {:^20} |"
         sep = "+" + "-" * 23 + "+" + "-" * 11 + "+" + "-" * 22 + "+"
+        print(sep)
+        print(hdr_fmt.format("Name", "Value", "Parameter"))
         print(sep)
         for label, val, flag in rows:
             print(fmt.format(label, val, flag))
@@ -391,6 +412,8 @@ _SENSOR_ROWS = [
     ("STAPM Value",  "stapm_value",  "W"),
     ("iGPU Clock",   "gfx_clk",      "MHz"),
     ("iGPU Temp",    "gfx_temp",     "°C"),
+    ("iGPU Power",   "gfx_power",    "W"),
+    ("iGPU Voltage", "gfx_volt",     "V"),
     ("Mem Clock",    "mem_clk",      "MHz"),
 ]
 
@@ -405,28 +428,74 @@ def _show_sensors(json_out: bool, family: str = "") -> None:
             print(f"ZenMaster: {msg}", file=sys.stderr)
         sys.exit(1)
 
+    cores = smu.read_pm_core_sensors(family)
     if json_out:
-        print(json.dumps(asdict(sensors), indent=2))
+        out = asdict(sensors)
+        if cores:
+            out["cores"] = [asdict(c) for c in cores]
+        print(json.dumps(out, indent=2))
     else:
         for label, field, unit in _SENSOR_ROWS:
             value = getattr(sensors, field)
             if value is not None:
                 print(f"{label:<12}: {value:8.1f} {unit}")
+        if cores:
+            has_freqeff = any(c.freqeff is not None for c in cores)
+            has_c0 = any(c.c0 is not None for c in cores)
+            has_cc1 = any(c.cc1 is not None for c in cores)
+            has_cc6 = any(c.cc6 is not None for c in cores)
+            headers = ["Core", "Power(W)", "Volt(V)", "Temp(C)", "Freq(GHz)"]
+            if has_freqeff:
+                headers.append("FreqEff")
+            if has_c0:
+                headers.append("C0%")
+            if has_cc1:
+                headers.append("CC1%")
+            if has_cc6:
+                headers.append("CC6%")
+            print()
+            fmt = "| " + " | ".join(f"{{:{w}}}" for w in [4, 8, 7, 7, 9])
+            if has_freqeff: fmt += " | {:7}"
+            if has_c0: fmt += " | {:4}"
+            if has_cc1: fmt += " | {:4}"
+            if has_cc6: fmt += " | {:4}"
+            fmt += " |"
+            print(fmt.format(*headers))
+            seps = ["-"*4, "-"*8, "-"*7, "-"*7, "-"*9]
+            if has_freqeff: seps.append("-"*7)
+            if has_c0: seps.append("-"*4)
+            if has_cc1: seps.append("-"*4)
+            if has_cc6: seps.append("-"*4)
+            print(fmt.format(*seps))
+            for c in cores:
+                vals = [c.core, f"{c.power:.3f}", f"{c.volt:.3f}", f"{c.temp:.1f}", f"{c.clk:.3f}"]
+                if has_freqeff:
+                    vals.append(f"{c.freqeff:.3f}" if c.freqeff is not None else "")
+                if has_c0:
+                    vals.append(f"{c.c0:.0f}" if c.c0 is not None else "")
+                if has_cc1:
+                    vals.append(f"{c.cc1:.0f}" if c.cc1 is not None else "")
+                if has_cc6:
+                    vals.append(f"{c.cc6:.0f}" if c.cc6 is not None else "")
+                print(fmt.format(*vals))
 
 
 def _dump_pm_table(json_out: bool, family: str = "") -> None:
     data, _ver = _require_pm_table(json_out, family)
     count = len(data) // 4
-    values = list(struct.unpack(f"<{count}f", data[:count * 4]))
+    raw_ints = list(struct.unpack(f"<{count}I", data[:count * 4]))
+    float_vals = list(struct.unpack(f"<{count}f", data[:count * 4]))
 
     if json_out:
         print(json.dumps({
-            "pm_table": [{"offset": f"0x{i*4:04X}", "value": v}
-                         for i, v in enumerate(values)],
+            "pm_table": [{"offset": f"0x{i*4:04X}", "data": f"0x{r:08X}", "value": v}
+                         for i, (r, v) in enumerate(zip(raw_ints, float_vals))],
         }, indent=2))
     else:
-        for i, v in enumerate(values):
-            print(f"| 0x{i*4:04X} | {v:9.3f} |")
+        print("| Offset |    Data    |   Value   |")
+        print("|--------|------------|-----------|")
+        for i, (r, v) in enumerate(zip(raw_ints, float_vals)):
+            print(f"| 0x{i*4:04X} | 0x{r:08X} | {v:9.3f} |")
 
 
 def main() -> None:

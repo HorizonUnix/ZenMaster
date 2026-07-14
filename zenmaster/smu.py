@@ -193,3 +193,47 @@ def unavailable_reason() -> str | None:
         return None
     except BackendUnavailable as e:
         return str(e)
+
+
+def get_bios_if_ver(family: str) -> int:
+    ensure_backend()
+    status, out = query_mp1(family, 0x03, 0)
+    return out[0] if status == SMU_OK else 0
+
+
+def get_smu_version(family: str) -> int:
+    ensure_backend()
+    status, out = query_mp1(family, 0x02, 1)
+    if status == SMU_OK and out[0]:
+        return out[0]
+    if platform.system() == "Linux":
+        for path in ("/sys/kernel/ryzen_smu_drv/version", "/sys/kernel/ryzen_smu_drv/drv_version"):
+            try:
+                with open(path, "r") as f:
+                    content = f.read().strip()
+                parts = [int(x) for x in content.split(".") if x.isdigit()]
+                if len(parts) == 4:
+                    return (parts[0] << 24) | (parts[1] << 16) | (parts[2] << 8) | parts[3]
+                if len(parts) == 3:
+                    return (parts[0] << 16) | (parts[1] << 8) | parts[2]
+            except OSError:
+                pass
+    return 0
+
+
+def format_smu_version(ver: int) -> str:
+    if not ver:
+        return "0.0.0.0"
+    if ver & 0xFF000000:
+        return f"{(ver >> 24) & 0xFF}.{(ver >> 16) & 0xFF}.{(ver >> 8) & 0xFF}.{ver & 0xFF}"
+    return f"{(ver >> 16) & 0xFF}.{(ver >> 8) & 0xFF}.{ver & 0xFF}"
+
+
+def read_pm_core_sensors(family: str = ""):
+    from zenmaster.table import read_core_sensors
+    ensure_backend()
+    r = read_pm_table_full(family)
+    if not r:
+        return None
+    data, ver = r
+    return read_core_sensors(data, ver)

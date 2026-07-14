@@ -331,7 +331,7 @@ def read_pm_table_full(family: str = "") -> tuple[bytes, int] | None:
         return _read_pm_table_pci(family)
     data = read_pm_table(family)
     if data is None:
-        return None
+        return _read_pm_table_pci(family)
     return data, read_pm_table_version(family)
 
 
@@ -344,7 +344,8 @@ def read_pm_table_version(family: str = "") -> int:
             raw = f.read(4)
         return struct.unpack("<I", raw)[0] if len(raw) >= 4 else 0
     except OSError:
-        return 0
+        r = _read_pm_table_pci(family)
+        return r[1] if r else 0
 
 
 def read_pm_table(family: str = "") -> bytes | None:
@@ -362,7 +363,8 @@ def read_pm_table(family: str = "") -> bytes | None:
         with open(table_path, "rb") as f:
             return f.read(size)
     except (OSError, ValueError):
-        return None
+        r = _read_pm_table_pci(family)
+        return r[0] if r else None
 
 
 def close() -> None:
