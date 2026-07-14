@@ -155,32 +155,119 @@ def read_sensors(data: bytes, ver: int) -> PmSensors:
         v = _f(data, off)
         return None if math.isnan(v) else v
 
-    if ver in _TCTL_V1:
-        tctl = 0x5C
+    tctl_temp_val = None
+    if ver in (0x00540104, 0x00540004, 0x00620205):
+        if ver == 0x00540104:
+            val, alt = f(0x2C), f(0xF0)
+            if val is not None and alt is not None:
+                tctl_temp_val = alt if alt > val and alt < 130.0 else val
+            elif val is not None:
+                tctl_temp_val = val
+    elif ver == 0x00620105:
+        hottest = -1000.0
+        for core in range(8):
+            ctemp = f(0x4F4 + core * 4)
+            if ctemp is not None and 0.0 < ctemp < 130.0:
+                hottest = max(hottest, ctemp)
+        if hottest > -1000.0:
+            tctl_temp_val = hottest
+    elif ver == 0x00240903:
+        tctl_temp_val = f(0x14)
+    elif ver in _TCTL_V1:
+        tctl_temp_val = f(0x5C)
     elif ver in _TCTL_V2:
-        tctl = 0x44
+        tctl_temp_val = f(0x44)
+
+    sock_pwr = None
+    if ver in (0x00540104, 0x00540004, 0x00620205):
+        sock_pwr = f(0x68)
+    elif ver == 0x00620105:
+        sock_pwr = f(0x50)
+    elif ver == 0x00240903:
+        sock_pwr = f(0x4)
     else:
-        tctl = None
+        sock_pwr = f(_SOCKET_POWER.get(ver))
+
+    gfx_clk_val = None
+    gfx_temp_val = None
+    if ver == 0x00540104:
+        gclk = f(0x190)
+        if gclk is not None and 1.0 <= gclk <= 10000.0:
+            gfx_clk_val = gclk
+            gtemp = f(0x188)
+            if gtemp is not None and 1.0 <= gtemp <= 130.0:
+                gfx_temp_val = gtemp
+    elif ver == 0x00620105:
+        gfx_clk_val = f(0x1B0)
+    else:
+        gfx_clk_val = f(_GFX_CLK.get(ver))
+        gfx_temp_val = f(_GFX_TEMP.get(ver))
+
+    if ver in (0x00540104, 0x00540004):
+        mem_clk_val = f(0x1D4)
+    elif ver == 0x00620105:
+        mem_clk_val = f(0x13C)
+    else:
+        mem_clk_val = f(_MEM_CLK.get(ver))
 
     return PmSensors(
-        stapm_limit=f(0x00), stapm_value=f(0x04),
-        fast_limit=f(0x08),  fast_value=f(0x0C),
-        slow_limit=f(0x10),  slow_value=f(0x14),
-        tctl_temp=f(tctl),
+        stapm_limit=f(0x00) if ver not in (0x00540104, 0x00540004, 0x00620105, 0x00620205, 0x00240903) else None,
+        stapm_value=f(0x04) if ver not in (0x00540104, 0x00540004, 0x00620105, 0x00620205, 0x00240903) else None,
+        fast_limit=f(0x08),
+        fast_value=f(0x458) if ver == 0x00620105 else f(0x0C),
+        slow_limit=f(0x3EC) if ver == 0x00620105 else (f(0x10) if ver not in (0x00540104, 0x00540004, 0x00620205) else None),
+        slow_value=f(0x14) if ver not in (0x00540104, 0x00540004, 0x00620105, 0x00620205, 0x00240903) else None,
+        tctl_temp=tctl_temp_val,
         cclk_busy=f(_CCLK_BUSY.get(ver)),
-        socket_power=f(_SOCKET_POWER.get(ver)),
-        gfx_clk=f(_GFX_CLK.get(ver)),
-        gfx_temp=f(_GFX_TEMP.get(ver)),
+        socket_power=sock_pwr,
+        gfx_clk=gfx_clk_val,
+        gfx_temp=gfx_temp_val,
         gfx_power=f(_GFX_POWER.get(ver)),
         gfx_volt=f(_GFX_VOLT.get(ver)),
-        mem_clk=f(_MEM_CLK.get(ver)),
+        mem_clk=mem_clk_val,
     )
 
 
 def read_table(data: bytes, ver: int) -> list[tuple[str, float, str]]:
     def f(off): return _f(data, off)
 
-    if ver in _VRM_V1:
+    if ver in (0x00540104, 0x00540004):
+        limit_val = f(0x20)
+        vrm_cur = 0x20 if limit_val is not None and 0.0 < limit_val <= 500.0 else None
+        vrm_cur_val = 0x50
+        vrmsoc_cur = vrmsoc_cur_val = None
+        edc_val = f(0xF4)
+        vrmmax_cur = 0xF4 if edc_val is not None and 0.0 < edc_val <= 500.0 else None
+        vrmmax_cur_val = None
+        vrmsocmax_cur = vrmsocmax_cur_val = None
+    elif ver == 0x00620105:
+        limit_val = f(0x28)
+        vrm_cur = 0x28 if limit_val is not None and 0.0 < limit_val <= 500.0 else None
+        vrm_cur_val = 0x438
+        vrmsoc_cur = vrmsoc_cur_val = None
+        edc_val = f(0x20)
+        vrmmax_cur = 0x20 if edc_val is not None and 0.0 < edc_val <= 500.0 else None
+        vrmmax_cur_val = None
+        vrmsocmax_cur = vrmsocmax_cur_val = None
+    elif ver == 0x00620205:
+        limit_val = f(0x20)
+        vrm_cur = 0x20 if limit_val is not None and 0.0 < limit_val <= 500.0 else None
+        vrm_cur_val = 0x24
+        vrmsoc_cur = vrmsoc_cur_val = None
+        edc_val = f(0xFC)
+        vrmmax_cur = 0xFC if edc_val is not None and 0.0 < edc_val <= 500.0 else None
+        vrmmax_cur_val = 0x100
+        vrmsocmax_cur = vrmsocmax_cur_val = None
+    elif ver == 0x00240903:
+        limit_val = f(0x8)
+        vrm_cur = 0x8 if limit_val is not None and 0.0 < limit_val <= 500.0 else None
+        vrm_cur_val = 0xC
+        vrmsoc_cur = vrmsoc_cur_val = None
+        edc_val = f(0x20)
+        vrmmax_cur = 0x20 if edc_val is not None and 0.0 < edc_val <= 500.0 else None
+        vrmmax_cur_val = 0x24
+        vrmsocmax_cur = vrmsocmax_cur_val = None
+    elif ver in _VRM_V1:
         vrm_cur, vrm_cur_val = 0x18, 0x1C
         vrmsoc_cur, vrmsoc_cur_val = 0x20, 0x24
         vrmmax_cur, vrmmax_cur_val = 0x28, 0x2C
@@ -198,12 +285,70 @@ def read_table(data: bytes, ver: int) -> list[tuple[str, float, str]]:
         vrm_cur = vrm_cur_val = vrmsoc_cur = vrmsoc_cur_val = None
         vrmmax_cur = vrmmax_cur_val = vrmsocmax_cur = vrmsocmax_cur_val = None
 
-    if ver in _TCTL_V1:
+    tctl_val_metric = None
+    if ver in (0x00540104, 0x00540004, 0x00620205):
+        tctl = 0x28
+        if ver == 0x00540104:
+            val, alt = f(0x2C), f(0xF0)
+            if val is not None and alt is not None:
+                tctl_val_metric = alt if alt > val and alt < 130.0 else val
+            elif val is not None:
+                tctl_val_metric = val
+    elif ver == 0x00620105:
+        tctl = 0x344
+        hottest = -1000.0
+        for core in range(8):
+            ctemp = f(0x4F4 + core * 4)
+            if ctemp is not None and 0.0 < ctemp < 130.0:
+                hottest = max(hottest, ctemp)
+        if hottest > -1000.0:
+            tctl_val_metric = hottest
+    elif ver == 0x00240903:
+        tctl = None
+        tctl_val_metric = f(0x14)
+    elif ver in _TCTL_V1:
         tctl, tctl_val = 0x58, 0x5C
+        tctl_val_metric = f(tctl_val)
     elif ver in _TCTL_V2:
         tctl, tctl_val = 0x40, 0x44
+        tctl_val_metric = f(tctl_val)
     else:
-        tctl = tctl_val = None
+        tctl = None
+        tctl_val_metric = None
+
+    if ver in (0x00540104, 0x00540004, 0x00620205):
+        sock_pwr = f(0x68)
+    elif ver == 0x00620105:
+        sock_pwr = f(0x50)
+    elif ver == 0x00240903:
+        sock_pwr = f(0x4)
+    else:
+        sock_pwr = f(_SOCKET_POWER.get(ver))
+
+    gfx_clk_val = None
+    gfx_temp_val = None
+    if ver == 0x00540104:
+        gclk = f(0x190)
+        if gclk is not None and 1.0 <= gclk <= 10000.0:
+            gfx_clk_val = gclk
+            gtemp = f(0x188)
+            if gtemp is not None and 1.0 <= gtemp <= 130.0:
+                gfx_temp_val = gtemp
+    elif ver == 0x00620105:
+        gfx_clk_val = f(0x1B0)
+    else:
+        gfx_clk_val = f(_GFX_CLK.get(ver))
+        gfx_temp_val = f(_GFX_TEMP.get(ver))
+
+    if ver in (0x00540104, 0x00540004):
+        mem_clk_val = f(0x1D4)
+    elif ver == 0x00620105:
+        mem_clk_val = f(0x13C)
+    else:
+        mem_clk_val = f(_MEM_CLK.get(ver))
+
+    ppt_fast_val = f(0x458) if ver == 0x00620105 else f(0x0C)
+    ppt_slow_lim = f(0x3EC) if ver == 0x00620105 else (f(0x10) if ver not in (0x00540104, 0x00540004, 0x00620205) else None)
 
     apu_slow_lim  = 0x18 if ver in _APU_SLOW_VERS else None
     apu_slow_val  = 0x1C if ver in _APU_SLOW_VERS else None
@@ -218,12 +363,12 @@ def read_table(data: bytes, ver: int) -> list[tuple[str, float, str]]:
         skin_dgpu_lim = skin_dgpu_val = None
 
     rows: list[tuple[str, float, str]] = [
-        ("STAPM LIMIT",        f(0x00), "stapm-limit"),
-        ("STAPM VALUE",        f(0x04), ""),
+        ("STAPM LIMIT",        f(0x00) if ver not in (0x00540104, 0x00540004, 0x00620105, 0x00620205, 0x00240903) else None, "stapm-limit"),
+        ("STAPM VALUE",        f(0x04) if ver not in (0x00540104, 0x00540004, 0x00620105, 0x00620205, 0x00240903) else None, ""),
         ("PPT LIMIT FAST",     f(0x08), "fast-limit"),
-        ("PPT VALUE FAST",     f(0x0C), ""),
-        ("PPT LIMIT SLOW",     f(0x10), "slow-limit"),
-        ("PPT VALUE SLOW",     f(0x14), ""),
+        ("PPT VALUE FAST",     ppt_fast_val, ""),
+        ("PPT LIMIT SLOW",     ppt_slow_lim, "slow-limit"),
+        ("PPT VALUE SLOW",     f(0x14) if ver not in (0x00540104, 0x00540004, 0x00620105, 0x00620205, 0x00240903) else None, ""),
         ("StapmTimeConst",     f(_STAPM_TIME.get(ver)), "stapm-time"),
         ("SlowPPTTimeConst",   f(_SLOW_TIME.get(ver)),  "slow-time"),
         ("PPT LIMIT APU",      f(apu_slow_lim),  "apu-slow-limit"),
@@ -237,21 +382,21 @@ def read_table(data: bytes, ver: int) -> list[tuple[str, float, str]]:
         ("EDC LIMIT SOC",      f(vrmsocmax_cur), "vrmsocmax-current"),
         ("EDC VALUE SOC",      f(vrmsocmax_cur_val), ""),
         ("THM LIMIT CORE",     f(tctl),          "tctl-temp"),
-        ("THM VALUE CORE",     f(tctl_val),      ""),
+        ("THM VALUE CORE",     tctl_val_metric,  ""),
         ("STT LIMIT APU",      f(skin_apu_lim),  "apu-skin-temp"),
         ("STT VALUE APU",      f(skin_apu_val),  ""),
         ("STT LIMIT dGPU",     f(skin_dgpu_lim), "dgpu-skin-temp"),
         ("STT VALUE dGPU",     f(skin_dgpu_val), ""),
         ("CCLK Boost SETPOINT",f(_CCLK_SETPOINT.get(ver)), "power-saving /"),
         ("CCLK BUSY VALUE",    f(_CCLK_BUSY.get(ver)),     "max-performance"),
-        ("SOCKET POWER VALUE", f(_SOCKET_POWER.get(ver)),  ""),
-        ("GFX CLK VALUE",      f(_GFX_CLK.get(ver)),       ""),
-        ("GFX TEMP VALUE",     f(_GFX_TEMP.get(ver)),      ""),
+        ("SOCKET POWER VALUE", sock_pwr,  ""),
+        ("GFX CLK VALUE",      gfx_clk_val,       ""),
+        ("GFX TEMP VALUE",     gfx_temp_val,      ""),
         ("GFX POWER VALUE",    f(_GFX_POWER.get(ver)),     ""),
         ("GFX VOLT VALUE",     f(_GFX_VOLT.get(ver)),      ""),
-        ("MEM CLK VALUE",      f(_MEM_CLK.get(ver)),       ""),
+        ("MEM CLK VALUE",      mem_clk_val,       ""),
     ]
-    return [(label, val, flag) for label, val, flag in rows if not math.isnan(val)]
+    return [(label, val, flag) for label, val, flag in rows if val is not None and not math.isnan(val)]
 
 
 @dataclass
