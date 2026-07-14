@@ -2,7 +2,7 @@
 
 ## [1.1.0] - 2026-07-14
 
-Most changes in this release originate from FlyGoat/RyzenAdj PR #408.
+Most changes in this release originate from [FlyGoat/RyzenAdj PR #408](https://github.com/FlyGoat/RyzenAdj/pull/408).
 
 ### Added
 - Direct `/dev/mem` fallback read path when `ryzen_smu` driver is loaded but `pm_table` sysfs nodes are unavailable on Linux.
@@ -11,9 +11,7 @@ Most changes in this release originate from FlyGoat/RyzenAdj PR #408.
 - Custom iGPU/GFX telemetry registers (`gfx_power` and `gfx_volt`) and aligned Strix Point temperature offsets (`0x4B8`) in table decoding.
 
 ### Changed
-- Renamed parameter `per-core-oc-clk` to `oc-clk-per-core` across command tables and ZenTune tests for naming consistency.
-- CLI `--table` output centered the headers (`Name`, `Value`, `Parameter`) to match RyzenAdj's formatting.
-- CLI `--dump-table` table dump outputs raw 32-bit hex data (`Data`) and offsets (`Offset`) column aligned with RyzenAdj's table dump format.
+- Renamed parameter `per-core-oc-clk` to `oc-clk-per-core` across command tables.
 
 ### Fixed
 - Reverted Curve Optimizer encoding logic for Strix Point APU mobile curve to legacy 16-bit format, fixing mobile curve application errors.
