@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.1.0] - 2026-07-14
+
+Most changes in this release originate from FlyGoat/RyzenAdj PR #408.
+
+### Added
+- Direct `/dev/mem` fallback read path when `ryzen_smu` driver is loaded but `pm_table` sysfs nodes are unavailable on Linux.
+- SMU BIOS Interface and Firmware Version mailbox queries (`0x03` and `0x02` respectively), with Linux sysfs version checking fallback. These versions are included in `--info` and `--info --json` output.
+- Per-core metrics decoding from the PM table (power, voltage, temp, clock, effective clock, and C0/CC1/CC6 residencies) and exposed in a new tabular readout under `zenmaster --sensors` and as a `cores` array in JSON output.
+- Custom iGPU/GFX telemetry registers (`gfx_power` and `gfx_volt`) and aligned Strix Point temperature offsets (`0x4B8`) in table decoding.
+
+### Changed
+- Renamed parameter `per-core-oc-clk` to `oc-clk-per-core` across command tables and ZenTune tests for naming consistency.
+- CLI `--table` output centered the headers (`Name`, `Value`, `Parameter`) to match RyzenAdj's formatting.
+- CLI `--dump-table` table dump outputs raw 32-bit hex data (`Data`) and offsets (`Offset`) column aligned with RyzenAdj's table dump format.
+
+### Fixed
+- Reverted Curve Optimizer encoding logic for Strix Point APU mobile curve to legacy 16-bit format, fixing mobile curve application errors.
+- Removed invalid RSMU `apu-skin-temp` command definitions on FT5/FT6 families to avoid RSMU response delays.
+
 ## [1.0.0] - 2026-07-04
 
 ZenMaster is stable. The public API is frozen going forward. Here's everything it does at this point.
