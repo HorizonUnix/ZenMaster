@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.1.1] - 2026-07-15
+
+- The `Rembrandt` codename should be model `64` or `68` (previously it was `63` or `68`).
+- Added additional implementation from [FlyGoat/RyzenAdj PR #408](https://github.com/FlyGoat/RyzenAdj/pull/408).
+
 ## [1.1.0] - 2026-07-14
 
 Most changes in this release originate from [FlyGoat/RyzenAdj PR #408](https://github.com/FlyGoat/RyzenAdj/pull/408).

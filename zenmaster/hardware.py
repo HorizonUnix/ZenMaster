@@ -146,7 +146,7 @@ def _resolve_codename(cpu_name: str, cpu_family: int, cpu_model: int) -> tuple[s
         arch = "Zen 3 - Zen 4"
         match cpu_model:
             case 33:        family = "Vermeer"
-            case 63 | 68:   family = "Rembrandt"
+            case 64 | 68:   family = "Rembrandt"
             case 80:        family = "Cezanne_Barcelo"
             case 97:        family = "DragonRange" if "HX" in cpu_name else "Raphael"
             case 116:       family = "PhoenixPoint"

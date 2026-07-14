@@ -126,6 +126,82 @@ _GFX_VOLT: dict[int, int] = {
 }
 
 
+_SOC_POWER = {
+    0x00370000: 0x1A0, 0x00370001: 0x1A0, 0x00370002: 0x1A0, 0x00370003: 0x1A0,
+    0x00370004: 0x1A0, 0x00370005: 0x1A0, 0x003F0000: 0x1A8, 0x00400004: 0x1A4,
+    0x00400005: 0x1A4, 0x00620105: 0x54,
+}
+_SOC_VOLT = {
+    0x00540104: 0xE0, 0x00540004: 0xE0, 0x00620105: 0x43C, 0x00620205: 0xE8,
+    0x00240903: 0xB0, 0x00370000: 0x198, 0x00370001: 0x198, 0x00370002: 0x198,
+    0x00370003: 0x198, 0x00370004: 0x198, 0x00370005: 0x198, 0x003F0000: 0x1A0,
+    0x00400004: 0x19C, 0x00400005: 0x19C,
+}
+_FCLK = {
+    0x00540104: 0x1A4, 0x00540004: 0x1A4, 0x00620105: 0x11C, 0x00620205: 0x1C4,
+    0x00240903: 0xC0, 0x00370000: 0x5CC, 0x00370001: 0x5CC, 0x00370002: 0x5CC,
+    0x00370003: 0x5CC, 0x00370004: 0x5CC, 0x00370005: 0x5E8, 0x003F0000: 0x3C5,
+    0x00400004: 0x664, 0x00400005: 0x664, 0x005D0008: 0x4E0, 0x005D0009: 0x4E0,
+    0x005D000B: 0x4E0, 0x00650005: 0x4E0, 0x00650007: 0x4E0,
+}
+_L3_CLK = {
+    0x00370000: 0x568, 0x00370001: 0x568, 0x00370002: 0x568, 0x00370003: 0x568,
+    0x00370004: 0x568, 0x00370005: 0x584, 0x003F0000: 0x35C, 0x00400004: 0x614,
+    0x00400005: 0x614,
+}
+_L3_LOGIC = {
+    0x00370000: 0x540, 0x00370001: 0x540, 0x00370002: 0x540, 0x00370003: 0x540,
+    0x00370004: 0x540, 0x00370005: 0x55C, 0x003F0000: 0x348, 0x00400004: 0x600,
+    0x00400005: 0x600,
+}
+_L3_VDDM = {
+    0x00370000: 0x548, 0x00370001: 0x548, 0x00370002: 0x548, 0x00370003: 0x548,
+    0x00370004: 0x548, 0x00370005: 0x564, 0x003F0000: 0x34C, 0x00400004: 0x604,
+    0x00400005: 0x604,
+}
+_L3_TEMP = {
+    0x00620105: 0x4A8, 0x00370000: 0x550, 0x00370001: 0x550, 0x00370002: 0x550,
+    0x00370003: 0x550, 0x00370004: 0x550, 0x00370005: 0x56C, 0x003F0000: 0x350,
+    0x00400004: 0x608, 0x00400005: 0x608,
+}
+_PSI0_CURRENT = {
+    0x001E0001: 0x40, 0x001E0002: 0x40, 0x001E0003: 0x40, 0x001E0004: 0x40,
+    0x001E0005: 0x40, 0x001E000A: 0x40, 0x001E0101: 0x40, 0x00370000: 0x78,
+    0x00370001: 0x78, 0x00370002: 0x78, 0x00370003: 0x78, 0x00370004: 0x78,
+    0x00370005: 0x78, 0x00400001: 0x78, 0x00400002: 0x78, 0x00400003: 0x78,
+    0x00400004: 0x78, 0x00400005: 0x78, 0x004C0006: 0x78, 0x004C0007: 0x78,
+    0x004C0008: 0x78, 0x004C0009: 0x78,
+}
+_PSI0_SOC_CURRENT = {
+    0x001E0001: 0x48, 0x001E0002: 0x48, 0x001E0003: 0x48, 0x001E0004: 0x48,
+    0x001E0005: 0x48, 0x001E000A: 0x48, 0x001E0101: 0x48, 0x00370000: 0x80,
+    0x00370001: 0x80, 0x00370002: 0x80, 0x00370003: 0x80, 0x00370004: 0x80,
+    0x00370005: 0x80, 0x00400001: 0x80, 0x00400002: 0x80, 0x00400003: 0x80,
+    0x00400004: 0x80, 0x00400005: 0x80, 0x004C0006: 0x80, 0x004C0007: 0x80,
+    0x004C0008: 0x80, 0x004C0009: 0x80,
+}
+_UCLK = {
+    0x00240903: 0xC4, 0x00620105: 0x12C, 0x00620205: 0x1C8, 0x005D0008: 0x4E4,
+    0x005D0009: 0x4E4, 0x005D000B: 0x4E4, 0x00650007: 0x4E4,
+}
+_MEM_PHY_CLK = {
+    0x00240903: 0xC8, 0x00620205: 0x1CC, 0x005D0008: 0x4E8, 0x005D0009: 0x4E8,
+    0x005D000B: 0x4E8, 0x00650007: 0x4E8,
+}
+_VCLK = {
+    0x005D0008: 0x4F0, 0x005D0009: 0x4F0, 0x005D000B: 0x4F0, 0x00650007: 0x4F0,
+}
+_SOCCLK = {
+    0x005D0008: 0x4F8, 0x005D0009: 0x4F8, 0x005D000B: 0x4F8, 0x00650007: 0x4F8,
+}
+_MPIPU_CLK = {
+    0x005D0008: 0x50C, 0x005D0009: 0x50C, 0x005D000B: 0x50C, 0x00650007: 0x50C,
+}
+_IPU_CLK = {
+    0x005D0008: 0x510, 0x005D0009: 0x510, 0x005D000B: 0x510, 0x00650007: 0x510,
+}
+
+
 def _f(data: bytes, off: int | None) -> float:
     if off is None or off + 4 > len(data):
         return math.nan
@@ -148,6 +224,24 @@ class PmSensors:
     gfx_power: float | None = None
     gfx_volt: float | None = None
     mem_clk: float | None = None
+    soc_power: float | None = None
+    soc_volt: float | None = None
+    fclk: float | None = None
+    l3_clk: float | None = None
+    l3_logic: float | None = None
+    l3_vddm: float | None = None
+    l3_temp: float | None = None
+    psi0_current: float | None = None
+    psi0soc_current: float | None = None
+    uclk: float | None = None
+    mem_phy_clk: float | None = None
+    mem_transfer_rate: float | None = None
+    vclk: float | None = None
+    socclk: float | None = None
+    mpipu_clk: float | None = None
+    ipu_clk: float | None = None
+
+
 
 
 def read_sensors(data: bytes, ver: int) -> PmSensors:
@@ -210,6 +304,21 @@ def read_sensors(data: bytes, ver: int) -> PmSensors:
     else:
         mem_clk_val = f(_MEM_CLK.get(ver))
 
+    mem_phy_clk_val = f(_MEM_PHY_CLK.get(ver))
+    mem_transfer_rate_val = None
+    if ver in (0x00240903, 0x00620205):
+        if mem_phy_clk_val is not None:
+            mem_transfer_rate_val = mem_phy_clk_val * 2.0
+    elif ver == 0x00620105:
+        if mem_clk_val is not None:
+            mem_transfer_rate_val = mem_clk_val * 2.0
+    elif ver in (0x005D0008, 0x005D0009, 0x005D000B, 0x00650007):
+        raw = f(0x4EC)
+        if raw is not None and mem_phy_clk_val is not None and raw >= mem_phy_clk_val and raw <= 20000.0:
+            mem_transfer_rate_val = raw
+        elif mem_phy_clk_val is not None:
+            mem_transfer_rate_val = mem_phy_clk_val * 2.0
+
     return PmSensors(
         stapm_limit=f(0x00) if ver not in (0x00540104, 0x00540004, 0x00620105, 0x00620205, 0x00240903) else None,
         stapm_value=f(0x04) if ver not in (0x00540104, 0x00540004, 0x00620105, 0x00620205, 0x00240903) else None,
@@ -225,6 +334,22 @@ def read_sensors(data: bytes, ver: int) -> PmSensors:
         gfx_power=f(_GFX_POWER.get(ver)),
         gfx_volt=f(_GFX_VOLT.get(ver)),
         mem_clk=mem_clk_val,
+        soc_power=f(_SOC_POWER.get(ver)),
+        soc_volt=f(_SOC_VOLT.get(ver)),
+        fclk=f(_FCLK.get(ver)),
+        l3_clk=f(_L3_CLK.get(ver)),
+        l3_logic=f(_L3_LOGIC.get(ver)),
+        l3_vddm=f(_L3_VDDM.get(ver)),
+        l3_temp=f(_L3_TEMP.get(ver)),
+        psi0_current=f(_PSI0_CURRENT.get(ver)),
+        psi0soc_current=f(_PSI0_SOC_CURRENT.get(ver)),
+        uclk=f(_UCLK.get(ver)),
+        mem_phy_clk=mem_phy_clk_val,
+        mem_transfer_rate=mem_transfer_rate_val,
+        vclk=f(_VCLK.get(ver)),
+        socclk=f(_SOCCLK.get(ver)),
+        mpipu_clk=f(_MPIPU_CLK.get(ver)),
+        ipu_clk=f(_IPU_CLK.get(ver)),
     )
 
 
@@ -347,6 +472,21 @@ def read_table(data: bytes, ver: int) -> list[tuple[str, float, str]]:
     else:
         mem_clk_val = f(_MEM_CLK.get(ver))
 
+    mem_phy_clk_val = f(_MEM_PHY_CLK.get(ver))
+    mem_transfer_rate_val = None
+    if ver in (0x00240903, 0x00620205):
+        if mem_phy_clk_val is not None:
+            mem_transfer_rate_val = mem_phy_clk_val * 2.0
+    elif ver == 0x00620105:
+        if mem_clk_val is not None:
+            mem_transfer_rate_val = mem_clk_val * 2.0
+    elif ver in (0x005D0008, 0x005D0009, 0x005D000B, 0x00650007):
+        raw = f(0x4EC)
+        if raw is not None and mem_phy_clk_val is not None and raw >= mem_phy_clk_val and raw <= 20000.0:
+            mem_transfer_rate_val = raw
+        elif mem_phy_clk_val is not None:
+            mem_transfer_rate_val = mem_phy_clk_val * 2.0
+
     ppt_fast_val = f(0x458) if ver == 0x00620105 else f(0x0C)
     ppt_slow_lim = f(0x3EC) if ver == 0x00620105 else (f(0x10) if ver not in (0x00540104, 0x00540004, 0x00620205) else None)
 
@@ -395,6 +535,22 @@ def read_table(data: bytes, ver: int) -> list[tuple[str, float, str]]:
         ("GFX POWER VALUE",    f(_GFX_POWER.get(ver)),     ""),
         ("GFX VOLT VALUE",     f(_GFX_VOLT.get(ver)),      ""),
         ("MEM CLK VALUE",      mem_clk_val,       ""),
+        ("SOC POWER",          f(_SOC_POWER.get(ver)),      ""),
+        ("SOC VOLT",           f(_SOC_VOLT.get(ver)),       ""),
+        ("FCLK (MHz)",         f(_FCLK.get(ver)),           ""),
+        ("L3 CLK (MHz)",       f(_L3_CLK.get(ver)),         ""),
+        ("L3 LOGIC",           f(_L3_LOGIC.get(ver)),       ""),
+        ("L3 VDDM",            f(_L3_VDDM.get(ver)),        ""),
+        ("L3 TEMP",            f(_L3_TEMP.get(ver)),        ""),
+        ("PSI0 CURRENT",       f(_PSI0_CURRENT.get(ver)),   "psi0-current"),
+        ("PSI0 SOC CURRENT",   f(_PSI0_SOC_CURRENT.get(ver)),"psi0soc-current"),
+        ("UCLK",               f(_UCLK.get(ver)),           ""),
+        ("MEM PHY CLK",        mem_phy_clk_val,             ""),
+        ("MEM TRANSFER RATE",  mem_transfer_rate_val,       ""),
+        ("VCLK",               f(_VCLK.get(ver)),           ""),
+        ("SOCCLK",             f(_SOCCLK.get(ver)),         ""),
+        ("MPIPU CLK",          f(_MPIPU_CLK.get(ver)),      ""),
+        ("IPU CLK",            f(_IPU_CLK.get(ver)),        ""),
     ]
     return [(label, val, flag) for label, val, flag in rows if val is not None and not math.isnan(val)]
 

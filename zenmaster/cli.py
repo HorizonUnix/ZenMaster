@@ -453,20 +453,20 @@ def _show_sensors(json_out: bool, family: str = "") -> None:
                 headers.append("CC1%")
             if has_cc6:
                 headers.append("CC6%")
+            widths = [4, 8, 7, 7, 9]
+            if has_freqeff: widths.append(7)
+            if has_c0: widths.append(4)
+            if has_cc1: widths.append(4)
+            if has_cc6: widths.append(4)
+
+            fmt = "| " + " | ".join(f"{{:>{w}}}" for w in widths) + " |"
+            hdr_fmt = "| " + " | ".join(f"{{:^{w}}}" for w in widths) + " |"
+            sep = "+" + "+".join("-" * (w + 2) for w in widths) + "+"
+
             print()
-            fmt = "| " + " | ".join(f"{{:{w}}}" for w in [4, 8, 7, 7, 9])
-            if has_freqeff: fmt += " | {:7}"
-            if has_c0: fmt += " | {:4}"
-            if has_cc1: fmt += " | {:4}"
-            if has_cc6: fmt += " | {:4}"
-            fmt += " |"
-            print(fmt.format(*headers))
-            seps = ["-"*4, "-"*8, "-"*7, "-"*7, "-"*9]
-            if has_freqeff: seps.append("-"*7)
-            if has_c0: seps.append("-"*4)
-            if has_cc1: seps.append("-"*4)
-            if has_cc6: seps.append("-"*4)
-            print(fmt.format(*seps))
+            print(sep)
+            print(hdr_fmt.format(*headers))
+            print(sep)
             for c in cores:
                 vals = [c.core, f"{c.power:.3f}", f"{c.volt:.3f}", f"{c.temp:.1f}", f"{c.clk:.3f}"]
                 if has_freqeff:
@@ -478,6 +478,7 @@ def _show_sensors(json_out: bool, family: str = "") -> None:
                 if has_cc6:
                     vals.append(f"{c.cc6:.0f}" if c.cc6 is not None else "")
                 print(fmt.format(*vals))
+            print(sep)
 
 
 def _dump_pm_table(json_out: bool, family: str = "") -> None:
