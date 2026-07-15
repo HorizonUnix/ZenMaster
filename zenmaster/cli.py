@@ -493,10 +493,13 @@ def _dump_pm_table(json_out: bool, family: str = "") -> None:
                          for i, (r, v) in enumerate(zip(raw_ints, float_vals))],
         }, indent=2))
     else:
+        sep = "+--------+------------+-----------+"
+        print(sep)
         print("| Offset |    Data    |   Value   |")
-        print("|--------|------------|-----------|")
+        print(sep)
         for i, (r, v) in enumerate(zip(raw_ints, float_vals)):
             print(f"| 0x{i*4:04X} | 0x{r:08X} | {v:9.3f} |")
+        print(sep)
 
 
 def main() -> None:
