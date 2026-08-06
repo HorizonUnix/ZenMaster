@@ -313,7 +313,7 @@ def _show_info(info: CpuInfo, backend: str | None, json_out: bool) -> None:
         print(json.dumps(out, indent=2))
     else:
         print(f"Name     : {info.name}")
-        print(f"Family   : {info.family}  ({info.arch})")
+        print(f"Family   : {info.family} ({info.arch})")
         print(f"Type     : {info.type}")
         print(f"Socket   : {socket}")
         print(f"Package  : {info.package_type}")

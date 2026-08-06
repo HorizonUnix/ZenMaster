@@ -363,9 +363,20 @@ def _read_ssdt_bytes() -> bytes:
     return data
 
 
+def _detect_dram_vendor(data: bytes) -> str | None:
+    if data:
+        for vid in _MANUFACTURER_MAP:
+            b1 = struct.pack(">H", vid)
+            b2 = struct.pack("<H", vid)
+            if b1 in data or b2 in data:
+                return decode_vendor(vid)
+    return None
+
+
 def read_timings(info: Any) -> dict[str, Any]:
     timings = MemoryTimings()
     apob_info = {}
+    data = b""
 
     try:
         from zenmaster import smu
@@ -392,7 +403,12 @@ def read_timings(info: Any) -> dict[str, Any]:
     except Exception:
         pass
 
-    return {
+    vendor = _detect_dram_vendor(data)
+    res = {}
+    if vendor:
+        res["DRAM Vendor"] = vendor
+
+    res.update({
         "DRAM Speed": f"{timings.mem_clk * 2} MT/s" if timings.mem_clk else "Auto",
         "tCL": timings.tcl or 16,
         "tRCDWR": timings.trcdwr or 18,
@@ -408,4 +424,6 @@ def read_timings(info: Any) -> dict[str, Any]:
         "tWTRS": timings.twtr_s or 4,
         "tWTRL": timings.twtr_l or 12,
         **apob_info,
-    }
+    })
+
+    return res
