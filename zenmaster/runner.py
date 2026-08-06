@@ -12,6 +12,9 @@ SOCKET_SP5_SP6      = "SP5_SP6"
 _FAMILY_SOCKET: dict[str, str] = {
     "SummitRidge":     SOCKET_AM4_V1,
     "PinnacleRidge":   SOCKET_AM4_V1,
+    "Whitehaven":      SOCKET_AM4_V1,
+    "Colfax":          SOCKET_AM4_V1,
+    "Naples":          SOCKET_AM4_V1,
     "RavenRidge":      SOCKET_FT5_FP5_AM4,
     "Picasso":         SOCKET_FT5_FP5_AM4,
     "Dali":            SOCKET_FT5_FP5_AM4,
@@ -24,6 +27,7 @@ _FAMILY_SOCKET: dict[str, str] = {
     "Lucienne":        SOCKET_FP6_AM4,
     "Cezanne_Barcelo": SOCKET_FP6_AM4,
     "VanGogh":         SOCKET_FF3,
+    "Mero":            SOCKET_FF3,
     "Mendocino":       SOCKET_FT6_FP7_FP8,
     "Vermeer":         SOCKET_AM4_V2,
     "Chagall":         SOCKET_AM4_V2,
@@ -46,6 +50,7 @@ _FAMILY_SOCKET: dict[str, str] = {
     "GraniteRidge":    SOCKET_AM5_V1,
     "FireRange":       SOCKET_AM5_V1,
     "Turin":           SOCKET_SP5_SP6,
+    "TurinD":          SOCKET_SP5_SP6,
     "ShimadaPeak":     SOCKET_SP5_SP6,
 }
 

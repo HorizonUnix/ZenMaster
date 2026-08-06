@@ -204,52 +204,126 @@ def _read_macos_acpi_ssdt() -> bytes:
     try:
         import ctypes
         import ctypes.util
-        iokit = ctypes.CDLL(ctypes.util.find_library("IOKit"))
-        cf = ctypes.CDLL(ctypes.util.find_library("CoreFoundation"))
+        iokit_path = ctypes.util.find_library("IOKit")
+        cf_path = ctypes.util.find_library("CoreFoundation")
+        if not iokit_path or not cf_path:
+            return b""
+
+        iokit = ctypes.CDLL(iokit_path)
+        cf = ctypes.CDLL(cf_path)
 
         iokit.IOServiceMatching.restype = ctypes.c_void_p
+        iokit.IOServiceMatching.argtypes = [ctypes.c_char_p]
+
+        iokit.IOServiceGetMatchingService.restype = ctypes.c_uint32
+        iokit.IOServiceGetMatchingService.argtypes = [ctypes.c_uint32, ctypes.c_void_p]
+
+        iokit.IORegistryEntryCreateCFProperty.restype = ctypes.c_void_p
+        iokit.IORegistryEntryCreateCFProperty.argtypes = [
+            ctypes.c_uint32, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_uint32
+        ]
+
+        iokit.IOObjectRelease.restype = ctypes.c_int
+        iokit.IOObjectRelease.argtypes = [ctypes.c_uint32]
+
+        cf.CFStringCreateWithCString.restype = ctypes.c_void_p
+        cf.CFStringCreateWithCString.argtypes = [
+            ctypes.c_void_p, ctypes.c_char_p, ctypes.c_uint32
+        ]
+
+        cf.CFRelease.restype = None
+        cf.CFRelease.argtypes = [ctypes.c_void_p]
+
+        cf.CFDictionaryGetCount.restype = ctypes.c_long
+        cf.CFDictionaryGetCount.argtypes = [ctypes.c_void_p]
+
+        cf.CFDictionaryGetKeysAndValues.restype = None
+        cf.CFDictionaryGetKeysAndValues.argtypes = [
+            ctypes.c_void_p,
+            ctypes.POINTER(ctypes.c_void_p),
+            ctypes.POINTER(ctypes.c_void_p),
+        ]
+
+        cf.CFGetTypeID.restype = ctypes.c_ulong
+        cf.CFGetTypeID.argtypes = [ctypes.c_void_p]
+
+        cf.CFDataGetTypeID.restype = ctypes.c_ulong
+        cf.CFDataGetTypeID.argtypes = []
+
+        cf.CFDataGetLength.restype = ctypes.c_long
+        cf.CFDataGetLength.argtypes = [ctypes.c_void_p]
+
+        cf.CFDataGetBytePtr.restype = ctypes.c_void_p
+        cf.CFDataGetBytePtr.argtypes = [ctypes.c_void_p]
+
+        cf.CFStringGetTypeID.restype = ctypes.c_ulong
+        cf.CFStringGetTypeID.argtypes = []
+
+        cf.CFStringGetCString.restype = ctypes.c_bool
+        cf.CFStringGetCString.argtypes = [
+            ctypes.c_void_p, ctypes.c_char_p, ctypes.c_long, ctypes.c_uint32
+        ]
+
         matching = iokit.IOServiceMatching(b"AppleACPIPlatformExpert")
         if not matching:
             return b""
 
-        iokit.IOServiceGetMatchingService.restype = ctypes.c_uint32
-        iokit.IOServiceGetMatchingService.argtypes = [ctypes.c_uint32, ctypes.c_void_p]
         service = iokit.IOServiceGetMatchingService(0, matching)
         if not service:
             return b""
 
-        cf.CFStringCreateWithCString.restype = ctypes.c_void_p
         key_name = cf.CFStringCreateWithCString(None, b"ACPI Tables", 0x08000100)
-        iokit.IORegistryEntryCreateCFProperty.restype = ctypes.c_void_p
-        dict_ref = iokit.IORegistryEntryCreateCFProperty(service, key_name, None, 0)
+        if not key_name:
+            iokit.IOObjectRelease(service)
+            return b""
 
+        dict_ref = iokit.IORegistryEntryCreateCFProperty(service, key_name, None, 0)
+        cf.CFRelease(key_name)
         iokit.IOObjectRelease(service)
+
         if not dict_ref:
             return b""
 
-        cf.CFDictionaryGetCount.restype = ctypes.c_long
-        count = cf.CFDictionaryGetCount(dict_ref)
-        if count <= 0:
-            return b""
+        try:
+            count = cf.CFDictionaryGetCount(dict_ref)
+            if count <= 0:
+                return b""
 
-        keys = (ctypes.c_void_p * count)()
-        values = (ctypes.c_void_p * count)()
-        cf.CFDictionaryGetKeysAndValues(dict_ref, keys, values)
+            keys = (ctypes.c_void_p * count)()
+            values = (ctypes.c_void_p * count)()
+            cf.CFDictionaryGetKeysAndValues(dict_ref, keys, values)
 
-        cf.CFDataGetLength.restype = ctypes.c_long
-        cf.CFDataGetBytePtr.restype = ctypes.c_void_p
+            data_type_id = cf.CFDataGetTypeID()
+            string_type_id = cf.CFStringGetTypeID()
+            name_buf = ctypes.create_string_buffer(128)
+            fallback_ssdt = b""
 
-        for i in range(count):
-            val_ref = values[i]
-            if val_ref:
-                length = cf.CFDataGetLength(val_ref)
-                ptr = cf.CFDataGetBytePtr(val_ref)
-                if ptr and length > 0:
-                    raw = ctypes.string_at(ptr, length)
-                    if b"AOD_" in raw or b"AAOD" in raw:
-                        return raw
+            for i in range(count):
+                key_ref = keys[i]
+                val_ref = values[i]
+
+                tbl_name = ""
+                if key_ref and cf.CFGetTypeID(key_ref) == string_type_id:
+                    if cf.CFStringGetCString(key_ref, name_buf, 128, 0x08000100):
+                        tbl_name = name_buf.value.decode("ascii", errors="ignore")
+
+                if val_ref and cf.CFGetTypeID(val_ref) == data_type_id:
+                    length = cf.CFDataGetLength(val_ref)
+                    ptr = cf.CFDataGetBytePtr(val_ref)
+                    if ptr and length > 0:
+                        raw = ctypes.string_at(ptr, length)
+                        if b"AOD_" in raw or b"AAOD" in raw:
+                            return raw
+                        if tbl_name.startswith("SSDT") and not fallback_ssdt:
+                            fallback_ssdt = raw
+
+            if fallback_ssdt:
+                return fallback_ssdt
+        finally:
+            cf.CFRelease(dict_ref)
     except Exception:
         pass
+
     return b""
 
 
