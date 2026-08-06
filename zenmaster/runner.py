@@ -7,6 +7,7 @@ SOCKET_FP6_AM4      = "FP6_AM4"
 SOCKET_FF3          = "FF3"
 SOCKET_FT6_FP7_FP8  = "FT6_FP7_FP8"
 SOCKET_AM5_V1       = "AM5_V1"
+SOCKET_SP5_SP6      = "SP5_SP6"
 
 _FAMILY_SOCKET: dict[str, str] = {
     "SummitRidge":     SOCKET_AM4_V1,
@@ -17,26 +18,35 @@ _FAMILY_SOCKET: dict[str, str] = {
     "Pollock":         SOCKET_FT5_FP5_AM4,
     "FireFlight":      SOCKET_FT5_FP5_AM4,
     "Matisse":         SOCKET_AM4_V2,
+    "CastlePeak":      SOCKET_AM4_V2,
+    "Rome":            SOCKET_AM4_V2,
     "Renoir":          SOCKET_FP6_AM4,
     "Lucienne":        SOCKET_FP6_AM4,
     "Cezanne_Barcelo": SOCKET_FP6_AM4,
     "VanGogh":         SOCKET_FF3,
     "Mendocino":       SOCKET_FT6_FP7_FP8,
     "Vermeer":         SOCKET_AM4_V2,
+    "Chagall":         SOCKET_AM4_V2,
+    "Milan":           SOCKET_AM4_V2,
     "Rembrandt":       SOCKET_FT6_FP7_FP8,
     "Raphael":         SOCKET_AM5_V1,
     "DragonRange":     SOCKET_AM5_V1,
+    "Genoa":           SOCKET_AM5_V1,
+    "Bergamo":         SOCKET_AM5_V1,
+    "StormPeak":       SOCKET_AM5_V1,
     "PhoenixPoint":    SOCKET_FT6_FP7_FP8,
     "PhoenixPoint2":   SOCKET_FT6_FP7_FP8,
     "HawkPoint":       SOCKET_FT6_FP7_FP8,
     "HawkPoint2":      SOCKET_FT6_FP7_FP8,
     "SonomaValley":    SOCKET_FT6_FP7_FP8,
-    "GraniteRidge":    SOCKET_AM5_V1,
-    "FireRange":       SOCKET_AM5_V1,
-    "StrixHalo":       SOCKET_FT6_FP7_FP8,
     "StrixPoint":      SOCKET_FT6_FP7_FP8,
+    "StrixHalo":       SOCKET_FT6_FP7_FP8,
     "KrackanPoint":    SOCKET_FT6_FP7_FP8,
     "KrackanPoint2":   SOCKET_FT6_FP7_FP8,
+    "GraniteRidge":    SOCKET_AM5_V1,
+    "FireRange":       SOCKET_AM5_V1,
+    "Turin":           SOCKET_SP5_SP6,
+    "ShimadaPeak":     SOCKET_SP5_SP6,
 }
 
 _CMD_AM4_V1: list[tuple[str, bool, int]] = [
@@ -173,6 +183,8 @@ _CMD_AM4_V2: list[tuple[str, bool, int]] = [
     ("get-sustained-power-and-thm-limit",  True,  0x23),
     ("get-overclocking-support",           False, 0x6f),
     ("get-coper-options",                  False, 0x7c),
+    ("transfer-table-to-dram",             False, 0x05),
+    ("get-dram-address",                   False, 0x04),
 ]
 
 _CMD_FP6_AM4: list[tuple[str, bool, int]] = [
@@ -331,6 +343,8 @@ _CMD_FT6_FP7_FP8: list[tuple[str, bool, int]] = [
     ("set-coper",                          False, 0x53),
     ("set-coall",                          True,  0x4c),
     ("set-coall",                          False, 0x5d),
+    ("set-curveshaper",                    False, 0x55),
+    ("set-curveshaper",                    True,  0x55),
     ("get-coper-options",                  False, 0xe1),
     ("get-sustained-power-and-thm-limit",  True,  0x5f),
     ("get-pbo-fused-power-limit",          False, 0x11),
@@ -370,6 +384,8 @@ _CMD_AM5_V1: list[tuple[str, bool, int]] = [
     ("set-coper",                          False, 0x06),
     ("set-coper",                          True,  0x35),
     ("set-cogfx",                          False, 0xa7),
+    ("set-curveshaper",                    False, 0x55),
+    ("set-curveshaper",                    True,  0x55),
     ("enable-oc",                          False, 0x5d),
     ("disable-oc",                         False, 0x5e),
     ("disable-prochot",                    False, 0x5d),
@@ -395,6 +411,44 @@ _CMD_AM5_V1: list[tuple[str, bool, int]] = [
     ("get-pbo-fused-slow-limit",           False, 0xdc),
     ("get-pbo-fused-apu-slow-limit",       False, 0xda),
     ("get-pbo-fused-tctl-temp",            False, 0xde),
+    ("transfer-table-to-dram",             False, 0x05),
+    ("get-dram-address",                   False, 0x04),
+]
+
+_CMD_SP5_SP6: list[tuple[str, bool, int]] = [
+    ("enable-feature",                     True,  0x03),
+    ("disable-feature",                    True,  0x04),
+    ("ppt-limit",                          True,  0x3e),
+    ("ppt-limit",                          False, 0x56),
+    ("tdc-limit",                          True,  0x3c),
+    ("tdc-limit",                          False, 0x57),
+    ("edc-limit",                          True,  0x3d),
+    ("edc-limit",                          False, 0x58),
+    ("tctl-temp",                          True,  0x3f),
+    ("tctl-temp",                          False, 0x59),
+    ("pbo-scalar",                         False, 0x5b),
+    ("set-coall",                          False, 0x07),
+    ("set-coall",                          True,  0x36),
+    ("set-coper",                          False, 0x06),
+    ("set-coper",                          True,  0x35),
+    ("set-cogfx",                          False, 0xa7),
+    ("set-curveshaper",                    False, 0x55),
+    ("set-curveshaper",                    True,  0x55),
+    ("set-boost-limit-frequency",          True,  0x2b),
+    ("get-boost-limit-frequency",          False, 0x2c),
+    ("enable-oc",                          False, 0x5d),
+    ("disable-oc",                         False, 0x5e),
+    ("oc-clk",                             False, 0x5f),
+    ("oc-clk-per-core",                    False, 0x60),
+    ("oc-volt",                            False, 0x61),
+    ("get-overclocking-support",           False, 0x6f),
+    ("get-pbo-scalar",                     False, 0x6d),
+    ("get-sustained-power-and-thm-limit",  True,  0x23),
+    ("get-pbo-fused-power-limit",          False, 0x11),
+    ("get-pbo-fused-slow-limit",           False, 0x12),
+    ("get-pbo-fused-fast-limit",           False, 0x13),
+    ("transfer-table-to-dram",             False, 0x05),
+    ("get-dram-address",                   False, 0x04),
 ]
 
 _SOCKET_COMMANDS: dict[str, list[tuple[str, bool, int]]] = {
@@ -405,6 +459,7 @@ _SOCKET_COMMANDS: dict[str, list[tuple[str, bool, int]]] = {
     SOCKET_FF3:         _CMD_FF3,
     SOCKET_FT6_FP7_FP8: _CMD_FT6_FP7_FP8,
     SOCKET_AM5_V1:      _CMD_AM5_V1,
+    SOCKET_SP5_SP6:     _CMD_SP5_SP6,
 }
 
 _LOOKUP: dict[str, dict[str, list[tuple[bool, int]]]] = {}
@@ -422,7 +477,7 @@ _ALL_KNOWN_ARGS: frozenset[str] = frozenset(
 _FLAG_ARGS: frozenset[str] = frozenset({
     "enable-oc", "disable-oc", "power-saving", "max-performance",
     "disable-prochot", "setcpu-freqto-ramstate", "stopcpu-freqto-ramstate",
-    "set-fll-btc-enable",
+    "set-fll-btc-enable", "transfer-table-to-dram",
 })
 
 def get_socket(family: str) -> str | None:
@@ -453,3 +508,4 @@ def all_known_args() -> frozenset[str]:
 def is_flag_arg(arg_name: str) -> bool:
     norm = arg_name.lstrip("-").replace("_", "-").lower()
     return norm in _FLAG_ARGS or norm.startswith("get-")
+

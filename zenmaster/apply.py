@@ -26,6 +26,36 @@ def _error(name: str, msg: str) -> ApplyResult:
             "status": 0, "error": msg, "returned": None}
 
 
+def make_psm_margin_arg(margin: int) -> int:
+    offset = 0x100000 if margin < 0 else 0
+    return (offset + margin) & 0xFFFF
+
+
+def make_per_core_co_arg(payload: str | int) -> int:
+    if isinstance(payload, int):
+        return make_psm_margin_arg(payload)
+    parts = [int(p.strip()) for p in str(payload).split(",")]
+    if len(parts) == 4:
+        ccd, ccx, core, margin = parts
+    elif len(parts) == 2:
+        ccd, ccx, core, margin = 0, 0, parts[0], parts[1]
+    else:
+        return 0
+    m = make_psm_margin_arg(margin)
+    return ((ccd & 0xF) << 28) | ((ccx & 0xF) << 24) | ((core & 0xF) << 20) | m
+
+
+def make_curve_shaper_arg(payload: str) -> int:
+    parts = [int(p.strip()) for p in payload.split(",")]
+    if len(parts) < 4:
+        return 0
+    high, med, low, tier = parts[:4]
+    high_b = (256 + high) & 0xFF if high < 0 else high & 0xFF
+    med_b = (256 + med) & 0xFF if med < 0 else med & 0xFF
+    low_b = (256 + low) & 0xFF if low < 0 else low & 0xFF
+    return (high_b << 24) | (med_b << 16) | (low_b << 8) | (1 << 7) | (tier & 0x7F)
+
+
 def apply(args_str: str, family: str) -> tuple[list[ApplyResult], bool]:
     try:
         tokens = shlex.split(args_str) if args_str.strip() else []
@@ -43,17 +73,39 @@ def apply(args_str: str, family: str) -> tuple[list[ApplyResult], bool]:
 
         if runner.is_flag_arg(name):
             value = 0
+            smu_val = 0
         elif not sep:
             results.append(_error(name, f"--{name} requires a value"))
             had_rejection = True
             continue
         else:
-            try:
-                value = int(val_str, 0)
-            except ValueError:
-                results.append(_error(name, f"invalid value '{val_str}'"))
-                had_rejection = True
-                continue
+            if name == "set-curveshaper":
+                try:
+                    smu_val = make_curve_shaper_arg(val_str)
+                    value = smu_val
+                except Exception:
+                    results.append(_error(name, f"invalid curve shaper format '{val_str}' (expected high,med,low,tier)"))
+                    had_rejection = True
+                    continue
+            elif name == "set-coper" and "," in val_str:
+                try:
+                    smu_val = make_per_core_co_arg(val_str)
+                    value = smu_val
+                except Exception:
+                    results.append(_error(name, f"invalid per-core format '{val_str}' (expected ccd,ccx,core,margin)"))
+                    had_rejection = True
+                    continue
+            else:
+                try:
+                    value = int(val_str, 0)
+                    if name in ("set-coall", "set-coper", "set-cogfx"):
+                        smu_val = make_psm_margin_arg(value)
+                    else:
+                        smu_val = _skin_scale(name, value) & 0xFFFFFFFF
+                except ValueError:
+                    results.append(_error(name, f"invalid value '{val_str}'"))
+                    had_rejection = True
+                    continue
 
         matches = runner.lookup(family, name)
         if not matches:
@@ -62,7 +114,6 @@ def apply(args_str: str, family: str) -> tuple[list[ApplyResult], bool]:
             continue
 
         is_query = name.startswith("get-")
-        smu_val = _skin_scale(name, value) & 0xFFFFFFFF
 
         any_ok = False
         for is_mp1, op in matches:
@@ -88,3 +139,4 @@ def apply(args_str: str, family: str) -> tuple[list[ApplyResult], bool]:
             had_rejection = True
 
     return results, had_rejection
+

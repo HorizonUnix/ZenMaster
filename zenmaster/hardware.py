@@ -14,6 +14,14 @@ class CpuInfo:
     cpu_family_int: int
     cpu_model_int: int
     cpu_stepping_int: int = 0
+    package_type: str = "Unknown"
+    ccds: int = 1
+    ccxs: int = 1
+    cores_per_ccx: int = 8
+    physical_cores: int = 8
+    logical_cores: int = 16
+    svi2_core_address: int = 0x00
+    svi2_soc_address: int = 0x00
 
 
 def _parse_cpuinfo() -> tuple[int, int, int, str]:
@@ -135,6 +143,7 @@ def _resolve_codename(cpu_name: str, cpu_family: int, cpu_model: int) -> tuple[s
             case 17 | 18:   family = "RavenRidge"
             case 24:        family = "Picasso"
             case 32:        family = "Pollock" if any(s in cpu_name for s in ("15e", "15Ce", "20e")) else "Dali"
+            case 48:        family = "Rome" if "EPYC" in cpu_name else "CastlePeak"
             case 80:        family = "FireFlight"
             case 96:        family = "Renoir"
             case 104:       family = "Lucienne"
@@ -145,6 +154,8 @@ def _resolve_codename(cpu_name: str, cpu_family: int, cpu_model: int) -> tuple[s
     elif cpu_family == 25:
         arch = "Zen 3 - Zen 4"
         match cpu_model:
+            case 1:         family = "Milan" if "EPYC" in cpu_name else "Chagall"
+            case 17:        family = "Genoa" if "EPYC" in cpu_name else "Bergamo"
             case 33:        family = "Vermeer"
             case 64 | 68:   family = "Rembrandt"
             case 80:        family = "Cezanne_Barcelo"
@@ -153,14 +164,17 @@ def _resolve_codename(cpu_name: str, cpu_family: int, cpu_model: int) -> tuple[s
             case 120:       family = "PhoenixPoint2"
             case 117:       family = "HawkPoint"
             case 124:       family = "HawkPoint2"
+            case 160:       family = "StormPeak"
 
     elif cpu_family == 26:
         arch = "Zen 5 - Zen 6"
         match cpu_model:
+            case 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15:
+                            family = "Turin" if "EPYC" in cpu_name else "ShimadaPeak"
+            case 32 | 36:   family = "StrixPoint"
             case 68:        family = "FireRange" if "HX" in cpu_name else "GraniteRidge"
             case 96:        family = "KrackanPoint"
             case 104:       family = "KrackanPoint2"
-            case 32 | 36:   family = "StrixPoint"
             case 112:       family = "StrixHalo"
 
     return arch, family
@@ -168,11 +182,17 @@ def _resolve_codename(cpu_name: str, cpu_family: int, cpu_model: int) -> tuple[s
 
 _DESKTOP_FAMILIES = {
     "SummitRidge", "PinnacleRidge", "Matisse",
-    "Vermeer", "Raphael", "GraniteRidge",
+    "Vermeer", "Raphael", "GraniteRidge", "ShimadaPeak",
+}
+
+_SERVER_FAMILIES = {
+    "Naples", "Rome", "Milan", "Genoa", "Bergamo", "Turin",
 }
 
 
 def _cpu_type(family: str, arch: str) -> str:
+    if family in _SERVER_FAMILIES:
+        return "Amd_Server_Cpu"
     if family in _DESKTOP_FAMILIES:
         return "Amd_Desktop_Cpu"
     if arch in ("Intel", "Unknown"):
@@ -180,9 +200,48 @@ def _cpu_type(family: str, arch: str) -> str:
     return "Amd_Apu"
 
 
+def _infer_topology(family: str) -> tuple[str, int, int, int, int, int]:
+    try:
+        threads = os.cpu_count() or 16
+    except Exception:
+        threads = 16
+    cores = max(1, threads // 2)
+
+    if family in ("SummitRidge", "PinnacleRidge", "Matisse", "Vermeer"):
+        pkg = "AM4"
+        ccds = max(1, cores // 8)
+        ccxs = ccds * (2 if family in ("SummitRidge", "PinnacleRidge") else 1)
+        cores_per_ccx = max(1, cores // ccxs)
+    elif family in ("Raphael", "GraniteRidge"):
+        pkg = "AM5"
+        ccds = max(1, cores // 8)
+        ccxs = ccds
+        cores_per_ccx = max(1, cores // ccxs)
+    elif family in _SERVER_FAMILIES:
+        pkg = "SP3/SP5"
+        ccds = max(1, cores // 8)
+        ccxs = ccds
+        cores_per_ccx = 8
+    else:
+        pkg = "FP6/FP7/FP8/AM5"
+        ccds = 1
+        ccxs = 1
+        cores_per_ccx = cores
+
+    return pkg, ccds, ccxs, cores_per_ccx, cores, threads
+
+
 def resolve(name: str, cpu_family_int: int, cpu_model_int: int, cpu_stepping_int: int = 0) -> CpuInfo:
     arch, family = _resolve_codename(name, cpu_family_int, cpu_model_int)
     t = _cpu_type(family, arch)
+    pkg, ccds, ccxs, c_per_ccx, p_cores, l_cores = _infer_topology(family)
+
+    svi2_core = 0x00
+    svi2_soc = 0x01
+    if family in ("Raphael", "GraniteRidge", "PhoenixPoint", "StrixPoint"):
+        svi2_core = 0x20
+        svi2_soc = 0x21
+
     return CpuInfo(
         name=name,
         arch=arch,
@@ -191,6 +250,14 @@ def resolve(name: str, cpu_family_int: int, cpu_model_int: int, cpu_stepping_int
         cpu_family_int=cpu_family_int,
         cpu_model_int=cpu_model_int,
         cpu_stepping_int=cpu_stepping_int,
+        package_type=pkg,
+        ccds=ccds,
+        ccxs=ccxs,
+        cores_per_ccx=c_per_ccx,
+        physical_cores=p_cores,
+        logical_cores=l_cores,
+        svi2_core_address=svi2_core,
+        svi2_soc_address=svi2_soc,
     )
 
 
@@ -204,3 +271,4 @@ def detect() -> CpuInfo:
     else:
         cpu_family_int, cpu_model_int, cpu_stepping_int, name = _parse_cpuinfo()
     return resolve(name, cpu_family_int, cpu_model_int, cpu_stepping_int)
+
