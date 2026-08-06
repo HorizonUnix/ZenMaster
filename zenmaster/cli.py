@@ -596,12 +596,7 @@ def main() -> None:
         if not rest and not flags.dump_table and not flags.table and not flags.sensors and not flags.timings:
             sys.exit(0)
 
-    if flags.timings:
-        _show_timings(info, flags.json_out)
-        if not rest and not flags.dump_table and not flags.table and not flags.sensors:
-            sys.exit(0)
-
-    if (flags.table or flags.dump_table or flags.sensors or rest) and backend is None:
+    if (flags.timings or flags.table or flags.dump_table or flags.sensors or rest) and backend is None:
         if not _is_root():
             print("ZenMaster: root/admin privileges required.", file=sys.stderr)
             print("Run with sudo (Linux/macOS) or as Administrator (Windows).", file=sys.stderr)
@@ -611,6 +606,11 @@ def main() -> None:
         except RuntimeError as e:
             print(f"ZenMaster: backend error: {e}", file=sys.stderr)
             sys.exit(1)
+
+    if flags.timings:
+        _show_timings(info, flags.json_out)
+        if not rest and not flags.dump_table and not flags.table and not flags.sensors:
+            sys.exit(0)
 
     if flags.table:
         _show_table(flags.json_out, info.family)
