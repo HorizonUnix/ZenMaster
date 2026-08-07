@@ -1,20 +1,5 @@
 # Changelog
 
-## [1.2.0] - 2026-08-06
-
-Most changes in this release originate from [irusanov/ZenStates-Core](https://github.com/irusanov/ZenStates-Core).
-
-### Added
-- Zen 5 15-band temperature and frequency tier Curve Shaper tuning (`--set-curveshaper="high,med,low,tier"`).
-- All-Core and Per-Core Curve Optimizer signed offset parsing (`--set-coall`, `--set-coper="ccd,ccx,core,margin"`) with `MakePsmMarginArg` bitfield packing.
-- DRAM and APOB memory timings engine (`zenmaster.timings` and `--timings`) for real-time DDR4/DDR5 subtimings, APOB termination impedances (ProcODT, RttPark, RttNom, RttWr, ProcDqDs, CkOdt, CsOdt, CaOdt), and JEDEC manufacturer decoding.
-- PM table In-DRAM physical memory flushing (`transfer-table-to-dram`, `get-dram-address`).
-- Support for newly added CPU family codenames: `Whitehaven`, `Colfax`, `Naples`, `CastlePeak`, `Rome`, `Mero`, `Chagall`, `Milan`, `Genoa`, `Bergamo`, `StormPeak`, `Turin`, `TurinD`, `ShimadaPeak`.
-- Support for newly added PM Table versions: `0x00240903`, `0x00540004`, `0x005D000A`, `0x00621102`, `0x00621202`, `0x00640107`, `0x00640108`, `0x00640109`, `0x0064010A`, `0x0064010C`, `0x00640207`, `0x00640208`, `0x00640209`, `0x0064020A`, `0x00650004`, `0x00650005`, `0x00650006`, `0x00650007`.
-- Dedicated enterprise socket group `SP5_SP6` for `Turin` and `Shimada Peak`.
-- Expanded hardware topology metadata (`package_type`, `ccds`, `ccxs`, `cores_per_ccx`, `physical_cores`, `logical_cores`, `svi2_core_address`, `svi2_soc_address`) exposed under `--info` and `--info --json`.
-- Re-exported `read_timings`, `make_psm_margin_arg`, `make_per_core_co_arg`, `make_curve_shaper_arg`, `parse_apob_buffer`, and `decode_vendor` at top-level `import zenmaster`.
-
 ## [1.1.1] - 2026-07-15
 
 - The `Rembrandt` codename should be model `64` or `68` (previously it was `63` or `68`).
