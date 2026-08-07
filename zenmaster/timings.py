@@ -296,7 +296,8 @@ def _read_macos_acpi_ssdt() -> bytes:
             data_type_id = cf.CFDataGetTypeID()
             string_type_id = cf.CFStringGetTypeID()
             name_buf = ctypes.create_string_buffer(128)
-            all_tables = []
+            fallback_ssdt = b""
+
             for i in range(count):
                 key_ref = keys[i]
                 val_ref = values[i]
@@ -313,11 +314,11 @@ def _read_macos_acpi_ssdt() -> bytes:
                         raw = ctypes.string_at(ptr, length)
                         if b"AOD_" in raw or b"AAOD" in raw or b"APOB" in raw:
                             return raw
-                        if tbl_name.startswith("SSDT") or tbl_name.startswith("DSDT"):
-                            all_tables.append(raw)
+                        if tbl_name.startswith("SSDT") and not fallback_ssdt:
+                            fallback_ssdt = raw
 
-            if all_tables:
-                return b"".join(all_tables)
+            if fallback_ssdt:
+                return fallback_ssdt
         finally:
             cf.CFRelease(dict_ref)
     except Exception:
