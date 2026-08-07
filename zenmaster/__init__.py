@@ -1,10 +1,10 @@
 from importlib.metadata import version, PackageNotFoundError
 
-from zenmaster import runner, smu, table
+from zenmaster import runner, smu, sensors
 from zenmaster.hardware import CpuInfo, detect, resolve
 from zenmaster.apply import apply, ApplyResult
 from zenmaster.update import check_update
-from zenmaster.table import PmSensors, read_sensors, CoreSensors, read_core_sensors
+from zenmaster.sensors import PmSensors, read_sensors, CoreSensors, read_core_sensors
 from zenmaster.smu import (
     SmuStatus, ModuleStatus, module_status, module_version, module_version_ok,
     secure_boot_enabled, is_available, init, close, ensure_backend, read_pm_sensors,
@@ -20,10 +20,10 @@ from zenmaster.errors import (
 try:
     __version__ = version("zenmaster")
 except PackageNotFoundError:
-    __version__ = "0.0.0"
+    __version__ = "1.2.0"
 
 __all__ = [
-    "CpuInfo", "detect", "resolve", "apply", "ApplyResult", "runner", "smu", "table",
+    "CpuInfo", "detect", "resolve", "apply", "ApplyResult", "runner", "smu", "sensors",
     "SmuStatus", "PmSensors", "read_sensors", "read_pm_sensors", "ModuleStatus",
     "module_status", "module_version", "module_version_ok", "secure_boot_enabled",
     "is_available", "init", "close", "ensure_backend", "send_arg", "unavailable_reason",

@@ -155,7 +155,7 @@ def ensure_backend() -> str | None:
 
 
 def read_pm_sensors(family: str = ""):
-    from zenmaster.table import read_sensors
+    from zenmaster.sensors import read_sensors
     ensure_backend()
     r = read_pm_table_full(family)
     if not r:
@@ -230,7 +230,7 @@ def format_smu_version(ver: int) -> str:
 
 
 def read_pm_core_sensors(family: str = ""):
-    from zenmaster.table import read_core_sensors
+    from zenmaster.sensors import read_core_sensors
     ensure_backend()
     r = read_pm_table_full(family)
     if not r:

@@ -130,37 +130,62 @@ def _resolve_codename(cpu_name: str, cpu_family: int, cpu_model: int) -> tuple[s
     if cpu_family == 23:
         arch = "Zen 1 - Zen 2"
         match cpu_model:
-            case 1:         family = "SummitRidge"
-            case 8:         family = "PinnacleRidge"
+            case 1:
+                if "EPYC" in cpu_name:
+                    family = "Naples"
+                elif "Threadripper" in cpu_name:
+                    family = "Whitehaven"
+                else:
+                    family = "SummitRidge"
+            case 8:
+                if "Threadripper" in cpu_name and "2" in cpu_name:
+                    family = "Colfax"
+                else:
+                    family = "PinnacleRidge"
             case 17 | 18:   family = "RavenRidge"
             case 24:        family = "Picasso"
             case 32:        family = "Pollock" if any(s in cpu_name for s in ("15e", "15Ce", "20e")) else "Dali"
+            case 49:
+                if "EPYC" in cpu_name:
+                    family = "Rome"
+                elif "Threadripper" in cpu_name:
+                    family = "CastlePeak"
             case 80:        family = "FireFlight"
             case 96:        family = "Renoir"
             case 104:       family = "Lucienne"
             case 113:       family = "Matisse"
             case 144 | 145: family = "VanGogh"
+            case 152:       family = "Mero"
             case 160:       family = "Mendocino"
 
     elif cpu_family == 25:
         arch = "Zen 3 - Zen 4"
         match cpu_model:
+            case 1:         family = "Milan"
+            case 8:         family = "Chagall"
+            case 17:        family = "Genoa"
+            case 24:        family = "StormPeak"
             case 33:        family = "Vermeer"
             case 64 | 68:   family = "Rembrandt"
             case 80:        family = "Cezanne_Barcelo"
             case 97:        family = "DragonRange" if "HX" in cpu_name else "Raphael"
+            case 100:       family = "SonomaValley"
             case 116:       family = "PhoenixPoint"
-            case 120:       family = "PhoenixPoint2"
             case 117:       family = "HawkPoint"
+            case 120:       family = "PhoenixPoint2"
             case 124:       family = "HawkPoint2"
+            case 160:       family = "Bergamo"
 
     elif cpu_family == 26:
         arch = "Zen 5 - Zen 6"
         match cpu_model:
+            case 2:         family = "Turin"
+            case 8:         family = "ShimadaPeak"
+            case 17:        family = "TurinD"
+            case 32 | 36:   family = "StrixPoint"
             case 68:        family = "FireRange" if "HX" in cpu_name else "GraniteRidge"
             case 96:        family = "KrackanPoint"
             case 104:       family = "KrackanPoint2"
-            case 32 | 36:   family = "StrixPoint"
             case 112:       family = "StrixHalo"
 
     return arch, family
@@ -171,8 +196,16 @@ _DESKTOP_FAMILIES = {
     "Vermeer", "Raphael", "GraniteRidge",
 }
 
+_SERVER_FAMILIES = {
+    "Naples", "Whitehaven", "Rome", "CastlePeak", "Colfax",
+    "Milan", "Chagall", "Genoa", "StormPeak",
+    "Bergamo", "Turin", "TurinD", "ShimadaPeak",
+}
 
-def _cpu_type(family: str, arch: str) -> str:
+
+def _cpu_type(family: str, arch: str, cpu_name: str = "") -> str:
+    if family in _SERVER_FAMILIES:
+        return "Amd_Server"
     if family in _DESKTOP_FAMILIES:
         return "Amd_Desktop_Cpu"
     if arch in ("Intel", "Unknown"):
@@ -182,7 +215,7 @@ def _cpu_type(family: str, arch: str) -> str:
 
 def resolve(name: str, cpu_family_int: int, cpu_model_int: int, cpu_stepping_int: int = 0) -> CpuInfo:
     arch, family = _resolve_codename(name, cpu_family_int, cpu_model_int)
-    t = _cpu_type(family, arch)
+    t = _cpu_type(family, arch, name)
     return CpuInfo(
         name=name,
         arch=arch,
