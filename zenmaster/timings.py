@@ -312,7 +312,7 @@ def _read_macos_acpi_ssdt() -> bytes:
                     ptr = cf.CFDataGetBytePtr(val_ref)
                     if ptr and length > 0:
                         raw = ctypes.string_at(ptr, length)
-                        if b"AOD_" in raw or b"AAOD" in raw or b"APOB" in raw:
+                        if b"AOD_" in raw or b"AAOD" in raw:
                             return raw
                         if tbl_name.startswith("SSDT") and not fallback_ssdt:
                             fallback_ssdt = raw
@@ -349,23 +349,6 @@ def _read_ssdt_bytes() -> bytes:
         try:
             kernel32 = getattr(ctypes, "windll", None) and getattr(ctypes.windll, "kernel32", None)
             if kernel32:
-                enum_fn = getattr(kernel32, "EnumSystemFirmwareTables", None)
-                get_fn = getattr(kernel32, "GetSystemFirmwareTable", None)
-                if enum_fn and get_fn:
-                    size = enum_fn(0x41435049, None, 0)
-                    if size > 0:
-                        tbl_buf = ctypes.create_string_buffer(size)
-                        if enum_fn(0x41435049, tbl_buf, size) > 0:
-                            count = size // 4
-                            tbl_ids = struct.unpack(f"<{count}I", tbl_buf.raw)
-                            for tbl_id in tbl_ids:
-                                tsize = get_fn(0x41435049, tbl_id, None, 0)
-                                if tsize > 0:
-                                    content_buf = ctypes.create_string_buffer(tsize)
-                                    if get_fn(0x41435049, tbl_id, content_buf, tsize) > 0:
-                                        content = content_buf.raw
-                                        if b"AOD_" in content or b"AAOD" in content or b"APOB" in content:
-                                            return content
                 size = kernel32.GetSystemFirmwareTable(0x41435049, 0x53534454, None, 0)
                 if size > 0:
                     buf = ctypes.create_string_buffer(size)
@@ -407,12 +390,8 @@ def read_timings(info: Any) -> dict[str, Any]:
 
     try:
         data = _read_ssdt_bytes()
-        if data:
-            cpu_fam_int = getattr(info, "cpu_family_int", 25)
-            apob_info = parse_apob_buffer(data, cpu_fam_int)
+        if data and (b"AOD_" in data or b"AAOD" in data):
             pos = data.find(b"AOD_")
-            if pos == -1:
-                pos = data.find(b"AAOD")
             if pos != -1 and len(data) >= pos + 64:
                 raw = data[pos:pos + 64]
                 timings.tcl = raw[12] if raw[12] > 0 else 16
