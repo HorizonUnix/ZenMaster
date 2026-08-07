@@ -28,13 +28,12 @@ _CATEGORIES: dict[str, list[str]] = {
                         "max-fclk-frequency", "min-fclk-frequency",
                         "max-vcn", "min-vcn", "max-lclk", "min-lclk",
                         "oc-clk", "oc-clk-per-core", "set-boost-limit-frequency",
-                        "set-vmin-freq", "get-boost-limit-frequency"],
+                        "set-vmin-freq"],
     "Overclocking":    ["enable-oc", "disable-oc", "oc-volt", "pbo-scalar",
-                        "set-coall", "set-coper", "set-cogfx", "set-curveshaper",
+                        "set-coall", "set-coper", "set-cogfx",
                         "set-gpuclockoverdrive-byvid"],
     "Power states":    ["power-saving", "max-performance",
-                        "enable-feature", "disable-feature",
-                        "transfer-table-to-dram"],
+                        "enable-feature", "disable-feature"],
     "Query / get":     ["get-pbo-scalar", "get-sustained-power-and-thm-limit",
                         "get-overclocking-support", "get-max-cpu-clk",
                         "get-min-gfx-clk", "get-max-gfx-clk", "get-curr-gfx-clk",
@@ -42,7 +41,7 @@ _CATEGORIES: dict[str, list[str]] = {
                         "get-pbo-fused-fast-limit", "get-pbo-fused-apu-slow-limit",
                         "get-pbo-fused-vrmtdc-limit", "get-pbo-fused-vrmsoc-current",
                         "get-pbo-fused-tctl-temp", "get-coper-options",
-                        "get-cogfx-options", "get-dram-address", "disable-prochot",
+                        "get-cogfx-options", "disable-prochot",
                         "set-fll-btc-enable", "set-vddoff-vid",
                         "set-ulv-vid", "setcpu-freqto-ramstate",
                         "stopcpu-freqto-ramstate"],
@@ -108,24 +107,20 @@ _ARG_DESCS: dict[str, str] = {
     "min-lclk":                  "Minimum Data Launch Clock frequency",
     "oc-clk":                    "Forced all-core clock speed (Renoir and up)",
     "oc-clk-per-core":           "Forced per-core clock speed (Renoir and up)",
-    "set-boost-limit-frequency": "Boost frequency ceiling override",
-    "get-boost-limit-frequency": "Query boost frequency ceiling",
+    "set-boost-limit-frequency": "Boost frequency ceiling",
     "set-vmin-freq":             "Minimum voltage frequency floor",
     "enable-oc":                 "Enable overclocking mode (Renoir and up)",
     "disable-oc":                "Disable overclocking mode (Renoir and up)",
     "oc-volt":                   "Forced core VID: (1.55 − target_V) / 0.00625 (Renoir and up)",
     "pbo-scalar":                "Precision Boost Overdrive scalar",
     "set-coall":                 "All-core Curve Optimizer offset",
-    "set-coper":                 "Per-core Curve Optimizer offset (ccd,ccx,core,margin)",
+    "set-coper":                 "Per-core Curve Optimizer offset",
     "set-cogfx":                 "iGPU Curve Optimizer offset",
-    "set-curveshaper":           "Zen 5 Curve Shaper margin (high,med,low,tier)",
     "set-gpuclockoverdrive-byvid": "Set GPU clock overdrive by VID",
     "power-saving":              "Apply power-saving profile (AC-unplugged behavior)",
     "max-performance":           "Apply max-performance profile (AC-plugged behavior)",
     "enable-feature":            "Enable a CPU/SMU feature by feature ID",
     "disable-feature":           "Disable a CPU/SMU feature by feature ID",
-    "transfer-table-to-dram":    "Instruct SMU to flush PM table directly to host RAM",
-    "get-dram-address":          "Query base physical RAM address of flushed PM table",
     "get-pbo-scalar":                   "Query current PBO scalar value",
     "get-sustained-power-and-thm-limit":"Query fused sustained power and thermal limit",
     "get-overclocking-support":         "Query overclocking support flags",
@@ -192,7 +187,6 @@ def _show_help(info: CpuInfo) -> None:
     print()
     print("Options:")
     print("  --info           Show CPU and backend info")
-    print("  --timings        Show active DRAM memory timings & termination settings")
     print("  --json           Machine-readable JSON output")
     print("  --reapply=N      Re-apply settings every N seconds (foreground)")
     print("  --version        Show version and check PyPI for a newer release")
@@ -283,14 +277,6 @@ def _show_info(info: CpuInfo, backend: str | None, json_out: bool) -> None:
             "arch": info.arch,
             "type": info.type,
             "socket": socket,
-            "package_type": info.package_type,
-            "ccds": info.ccds,
-            "ccxs": info.ccxs,
-            "cores_per_ccx": info.cores_per_ccx,
-            "physical_cores": info.physical_cores,
-            "logical_cores": info.logical_cores,
-            "svi2_core_address": f"0x{info.svi2_core_address:02X}",
-            "svi2_soc_address": f"0x{info.svi2_soc_address:02X}",
             "cpu_family_int": info.cpu_family_int,
             "cpu_model_int": info.cpu_model_int,
             "cpu_stepping_int": info.cpu_stepping_int,
@@ -312,14 +298,10 @@ def _show_info(info: CpuInfo, backend: str | None, json_out: bool) -> None:
                 out["smu_version_hex"] = f"0x{smu_ver:08X}"
         print(json.dumps(out, indent=2))
     else:
-        print(f"Name     : {info.name}")
-        print(f"Family   : {info.family}  ({info.arch})")
-        print(f"Type     : {info.type}")
-        print(f"Socket   : {socket}")
-        print(f"Package  : {info.package_type}")
-        print(f"Topology : {info.ccds} CCD(s), {info.ccxs} CCX(s), {info.cores_per_ccx} cores/CCX")
-        print(f"Cores    : {info.physical_cores} Physical / {info.logical_cores} Logical")
-        print(f"SVI2/3   : Core 0x{info.svi2_core_address:02X}, SoC 0x{info.svi2_soc_address:02X}")
+        print(f"Name   : {info.name}")
+        print(f"Family : {info.family}  ({info.arch})")
+        print(f"Type   : {info.type}")
+        print(f"Socket : {socket}")
         if backend is not None:
             print(f"Backend: {backend}")
             print(f"Driver : {_driver_line(backend)}")
@@ -327,17 +309,6 @@ def _show_info(info: CpuInfo, backend: str | None, json_out: bool) -> None:
                 print(f"SMU BIOS IF: {bios_ver}")
             if smu_ver:
                 print(f"SMU Version: {smu.format_smu_version(smu_ver)} (0x{smu_ver:08X})")
-
-
-def _show_timings(info: CpuInfo, json_out: bool) -> None:
-    from zenmaster.timings import read_timings
-    data = read_timings(info)
-    if json_out:
-        print(json.dumps(data, indent=2))
-    else:
-        print("Active Memory Timings & Termination:")
-        for k, v in data.items():
-            print(f"  {k:<16}: {v}")
 
 
 def _format_results(results: list[dict], info: CpuInfo, backend: str | None,
@@ -544,7 +515,6 @@ def main() -> None:
 
     p = argparse.ArgumentParser(add_help=False)
     p.add_argument("--info",         action="store_true")
-    p.add_argument("--timings",      action="store_true")
     p.add_argument("--json",         action="store_true", dest="json_out")
     p.add_argument("--reapply",      type=int, default=0, metavar="SECONDS")
     p.add_argument("--dump-table",   action="store_true", dest="dump_table")
@@ -564,7 +534,7 @@ def main() -> None:
 
     info = detect()
 
-    if info.type not in ("Amd_Apu", "Amd_Desktop_Cpu", "Amd_Server_Cpu"):
+    if info.type not in ("Amd_Apu", "Amd_Desktop_Cpu"):
         print(f"ZenMaster: unsupported CPU '{info.name}' (only AMD Ryzen supported)", file=sys.stderr)
         sys.exit(1)
 
@@ -578,7 +548,7 @@ def main() -> None:
                 _show_help(info)
                 sys.exit(0)
 
-    if not (flags.info or flags.timings or flags.table or flags.dump_table or flags.sensors or rest):
+    if not (flags.info or flags.table or flags.dump_table or flags.sensors or rest):
         print("ZenMaster: nothing to do, no action flag or tuning args given.\n", file=sys.stderr)
         _show_help(info)
         sys.exit(1)
@@ -593,11 +563,6 @@ def main() -> None:
                 if not flags.json_out:
                     print(f"ZenMaster: backend unavailable: {e}", file=sys.stderr)
         _show_info(info, backend, flags.json_out)
-        if not rest and not flags.dump_table and not flags.table and not flags.sensors and not flags.timings:
-            sys.exit(0)
-
-    if flags.timings:
-        _show_timings(info, flags.json_out)
         if not rest and not flags.dump_table and not flags.table and not flags.sensors:
             sys.exit(0)
 
@@ -641,4 +606,3 @@ def main() -> None:
         except KeyboardInterrupt:
             if not flags.json_out:
                 print("\nZenMaster: stopped.")
-
