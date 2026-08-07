@@ -94,19 +94,6 @@ def _libSystem():
     if _libc is None:
         import ctypes
         _libc = ctypes.CDLL("/usr/lib/libSystem.B.dylib")
-        fn = getattr(_libc, "sysctlbyname", None)
-        if fn and hasattr(fn, "restype"):
-            try:
-                fn.restype = ctypes.c_int
-                fn.argtypes = [
-                    ctypes.c_char_p,
-                    ctypes.c_void_p,
-                    ctypes.POINTER(ctypes.c_size_t),
-                    ctypes.c_void_p,
-                    ctypes.c_size_t,
-                ]
-            except AttributeError:
-                pass
     return _libc
 
 
@@ -151,27 +138,24 @@ def _resolve_codename(cpu_name: str, cpu_family: int, cpu_model: int) -> tuple[s
     if cpu_family == 23:
         arch = "Zen 1 - Zen 2"
         match cpu_model:
-            case 1:         family = "Naples" if "EPYC" in cpu_name else ("Whitehaven" if "Threadripper" in cpu_name else "SummitRidge")
-            case 8:         family = "Colfax" if ("EPYC" in cpu_name or "Threadripper" in cpu_name) else "PinnacleRidge"
+            case 1:         family = "SummitRidge"
+            case 8:         family = "PinnacleRidge"
             case 17 | 18:   family = "RavenRidge"
             case 24:        family = "Picasso"
-            case 32:        family = "Pollock" if any(s in cpu_name for s in ("15e", "15Ce", "20e", "3015e", "3020e", "3150e", "3050e", "Pollock")) else "Dali"
-            case 49:        family = "Rome" if "EPYC" in cpu_name else "CastlePeak"
+            case 32:        family = "Pollock" if any(s in cpu_name for s in ("15e", "15Ce", "20e")) else "Dali"
+            case 48:        family = "Rome" if "EPYC" in cpu_name else "CastlePeak"
             case 80:        family = "FireFlight"
             case 96:        family = "Renoir"
             case 104:       family = "Lucienne"
             case 113:       family = "Matisse"
             case 144 | 145: family = "VanGogh"
-            case 152:       family = "Mero"
             case 160:       family = "Mendocino"
 
     elif cpu_family == 25:
         arch = "Zen 3 - Zen 4"
         match cpu_model:
-            case 1:         family = "Milan"
-            case 8:         family = "Chagall"
-            case 17:        family = "Genoa"
-            case 24:        family = "StormPeak"
+            case 1:         family = "Milan" if "EPYC" in cpu_name else "Chagall"
+            case 17:        family = "Genoa" if "EPYC" in cpu_name else "Bergamo"
             case 33:        family = "Vermeer"
             case 64 | 68:   family = "Rembrandt"
             case 80:        family = "Cezanne_Barcelo"
@@ -180,14 +164,13 @@ def _resolve_codename(cpu_name: str, cpu_family: int, cpu_model: int) -> tuple[s
             case 120:       family = "PhoenixPoint2"
             case 117:       family = "HawkPoint"
             case 124:       family = "HawkPoint2"
-            case 160:       family = "Bergamo"
+            case 160:       family = "StormPeak"
 
     elif cpu_family == 26:
         arch = "Zen 5 - Zen 6"
         match cpu_model:
-            case 2:         family = "Turin"
-            case 8:         family = "ShimadaPeak"
-            case 17:        family = "TurinD"
+            case 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15:
+                            family = "Turin" if "EPYC" in cpu_name else "ShimadaPeak"
             case 32 | 36:   family = "StrixPoint"
             case 68:        family = "FireRange" if "HX" in cpu_name else "GraniteRidge"
             case 96:        family = "KrackanPoint"
@@ -200,11 +183,10 @@ def _resolve_codename(cpu_name: str, cpu_family: int, cpu_model: int) -> tuple[s
 _DESKTOP_FAMILIES = {
     "SummitRidge", "PinnacleRidge", "Matisse",
     "Vermeer", "Raphael", "GraniteRidge", "ShimadaPeak",
-    "Whitehaven", "Colfax", "CastlePeak", "Chagall", "StormPeak",
 }
 
 _SERVER_FAMILIES = {
-    "Naples", "Rome", "Milan", "Genoa", "Bergamo", "Turin", "TurinD",
+    "Naples", "Rome", "Milan", "Genoa", "Bergamo", "Turin",
 }
 
 
@@ -225,18 +207,18 @@ def _infer_topology(family: str) -> tuple[str, int, int, int, int, int]:
         threads = 16
     cores = max(1, threads // 2)
 
-    if family in ("SummitRidge", "PinnacleRidge", "Matisse", "Vermeer", "Whitehaven", "Colfax"):
-        pkg = "AM4/TRX"
+    if family in ("SummitRidge", "PinnacleRidge", "Matisse", "Vermeer"):
+        pkg = "AM4"
         ccds = max(1, cores // 8)
-        ccxs = ccds * (2 if family in ("SummitRidge", "PinnacleRidge", "Whitehaven", "Colfax") else 1)
+        ccxs = ccds * (2 if family in ("SummitRidge", "PinnacleRidge") else 1)
         cores_per_ccx = max(1, cores // ccxs)
     elif family in ("Raphael", "GraniteRidge"):
         pkg = "AM5"
         ccds = max(1, cores // 8)
         ccxs = ccds
         cores_per_ccx = max(1, cores // ccxs)
-    elif family in _SERVER_FAMILIES or family in ("CastlePeak", "Chagall", "StormPeak", "ShimadaPeak"):
-        pkg = "SP3/SP5/SP6/TRX"
+    elif family in _SERVER_FAMILIES:
+        pkg = "SP3/SP5"
         ccds = max(1, cores // 8)
         ccxs = ccds
         cores_per_ccx = 8
