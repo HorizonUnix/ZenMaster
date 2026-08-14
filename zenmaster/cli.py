@@ -11,7 +11,7 @@ from dataclasses import asdict
 from zenmaster import __version__, runner, smu
 from zenmaster.apply import apply
 from zenmaster.hardware import CpuInfo, detect
-from zenmaster.sensors import read_table
+from zenmaster.table import read_table
 
 _CATEGORIES: dict[str, list[str]] = {
     "Power limits":    ["stapm-limit", "fast-limit", "slow-limit", "ppt-limit",
@@ -193,8 +193,8 @@ def _show_help(info: CpuInfo) -> None:
     if platform.system() == "Darwin":
         print("  --iopci          Force the kext-free IOPCIBridge path (tuning only)")
     if smu.pm_table_supported(info.family):
-        print("  --table          Show PM table version and labeled power metrics")
-        print("  --sensors        Show live sensor values (temp, power, clocks)")
+        print("  --table          Show labeled power metrics table")
+        print("  --sensors        Show key live sensors (temp, load, power, clocks)")
         print("  --dump-table     Dump raw PM table floats with hex offsets")
     print()
 
@@ -355,7 +355,7 @@ def _format_results(results: list[dict], info: CpuInfo, backend: str | None,
 def _pm_unavailable_msg(family: str = "") -> str:
     if platform.system() == "Darwin" and smu.active_backend() == "iopci":
         return (
-            "--table and --dump-table read the PM table, which is only "
+            "--table, --dump-table and --sensors read the PM table, which is only "
             "available through DirectHW.kext.\n"
             "Install and load DirectHW for sensors; the kext-free IOPCIBridge path "
             "supports tuning only."
@@ -387,24 +387,22 @@ def _show_table(json_out: bool, family: str = "") -> None:
     rows = read_table(data, ver)
 
     if json_out:
-        out: dict = {
+        print(json.dumps({
             "pm_table_version": f"0x{ver:08X}",
             "fields": [{"name": label, "value": val, "flag": flag}
                        for label, val, flag in rows],
-        }
-        print(json.dumps(out, indent=2))
-        return
-
-    print(f"PM Table Version: 0x{ver:08X}")
-    fmt = "| {:<21} | {:>9.3f} | {:<20} |"
-    hdr_fmt = "| {:^21} | {:^9} | {:^20} |"
-    sep = "+" + "-" * 23 + "+" + "-" * 11 + "+" + "-" * 22 + "+"
-    print(sep)
-    print(hdr_fmt.format("Name", "Value", "Parameter"))
-    print(sep)
-    for label, val, flag in rows:
-        print(fmt.format(label, val, flag))
-    print(sep)
+        }, indent=2))
+    else:
+        print(f"PM Table Version: 0x{ver:08X}")
+        fmt = "| {:<21} | {:>9.3f} | {:<20} |"
+        hdr_fmt = "| {:^21} | {:^9} | {:^20} |"
+        sep = "+" + "-" * 23 + "+" + "-" * 11 + "+" + "-" * 22 + "+"
+        print(sep)
+        print(hdr_fmt.format("Name", "Value", "Parameter"))
+        print(sep)
+        for label, val, flag in rows:
+            print(fmt.format(label, val, flag))
+        print(sep)
 
 
 _SENSOR_ROWS = [
@@ -416,33 +414,8 @@ _SENSOR_ROWS = [
     ("iGPU Temp",    "gfx_temp",     "°C"),
     ("iGPU Power",   "gfx_power",    "W"),
     ("iGPU Voltage", "gfx_volt",     "V"),
-    ("FCLK",         "fclk",         "MHz"),
-    ("UCLK",         "uclk",         "MHz"),
     ("Mem Clock",    "mem_clk",      "MHz"),
-    ("SoC Power",    "soc_power",    "W"),
-    ("SoC Voltage",  "soc_volt",     "V"),
 ]
-
-
-def _dump_pm_table(json_out: bool, family: str = "") -> None:
-    data, _ver = _require_pm_table(json_out, family)
-    count = len(data) // 4
-    raw_ints = list(struct.unpack(f"<{count}I", data[:count * 4]))
-    float_vals = list(struct.unpack(f"<{count}f", data[:count * 4]))
-
-    if json_out:
-        print(json.dumps({
-            "pm_table": [{"offset": f"0x{i*4:04X}", "data": f"0x{r:08X}", "value": v}
-                         for i, (r, v) in enumerate(zip(raw_ints, float_vals))],
-        }, indent=2))
-    else:
-        sep = "+--------+------------+-----------+"
-        print(sep)
-        print("| Offset |    Data    |   Value   |")
-        print(sep)
-        for i, (r, v) in enumerate(zip(raw_ints, float_vals)):
-            print(f"| 0x{i*4:04X} | 0x{r:08X} | {v:9.3f} |")
-        print(sep)
 
 
 def _show_sensors(json_out: bool, family: str = "") -> None:
@@ -508,6 +481,27 @@ def _show_sensors(json_out: bool, family: str = "") -> None:
             print(sep)
 
 
+def _dump_pm_table(json_out: bool, family: str = "") -> None:
+    data, _ver = _require_pm_table(json_out, family)
+    count = len(data) // 4
+    raw_ints = list(struct.unpack(f"<{count}I", data[:count * 4]))
+    float_vals = list(struct.unpack(f"<{count}f", data[:count * 4]))
+
+    if json_out:
+        print(json.dumps({
+            "pm_table": [{"offset": f"0x{i*4:04X}", "data": f"0x{r:08X}", "value": v}
+                         for i, (r, v) in enumerate(zip(raw_ints, float_vals))],
+        }, indent=2))
+    else:
+        sep = "+--------+------------+-----------+"
+        print(sep)
+        print("| Offset |    Data    |   Value   |")
+        print(sep)
+        for i, (r, v) in enumerate(zip(raw_ints, float_vals)):
+            print(f"| 0x{i*4:04X} | 0x{r:08X} | {v:9.3f} |")
+        print(sep)
+
+
 def main() -> None:
     argv = sys.argv[1:]
 
@@ -540,11 +534,8 @@ def main() -> None:
 
     info = detect()
 
-    if info.type not in ("Amd_Apu", "Amd_Desktop_Cpu", "Amd_Server"):
-        print(f"ZenMaster: unsupported CPU", file=sys.stderr)
-        print(f"  Name   : {info.name}", file=sys.stderr)
-        print(f"  Family : {info.cpu_family_int}  Model: {info.cpu_model_int}  Stepping: {info.cpu_stepping_int}", file=sys.stderr)
-        print(f"  Only AMD Ryzen (Family 17h+) is supported.", file=sys.stderr)
+    if info.type not in ("Amd_Apu", "Amd_Desktop_Cpu"):
+        print(f"ZenMaster: unsupported CPU '{info.name}' (only AMD Ryzen supported)", file=sys.stderr)
         sys.exit(1)
 
     if rest:
