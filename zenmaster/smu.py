@@ -87,6 +87,14 @@ def query_rsmu(family: str, op: int, arg0: int = 0) -> tuple[int, list[int]]:
     return _backend().query_rsmu(family, op, arg0)
 
 
+def send_hsmp(family: str, op: int, arg0: int = 0) -> int:
+    return _backend().send_hsmp(family, op, arg0)
+
+
+def query_hsmp(family: str, op: int, arg0: int = 0) -> tuple[int, list[int]]:
+    return _backend().query_hsmp(family, op, arg0)
+
+
 def pm_table_supported(family: str = "") -> bool:
     b = _backend()
     fn = getattr(b, "pm_table_supported", None)
@@ -171,12 +179,19 @@ def send_arg(family: str, name: str, value: int) -> list[tuple[str, int, int]]:
         raise UnsupportedCPU(f"'{family}' is not a supported CPU family")
     ensure_backend()
     out: list[tuple[str, int, int]] = []
+    use_hsmp = runner.is_hsmp(family)
     for is_mp1, op in runner.lookup(family, name):
         try:
-            status = send_mp1(family, op, value) if is_mp1 else send_rsmu(family, op, value)
+            if use_hsmp:
+                status = send_hsmp(family, op, value)
+            elif is_mp1:
+                status = send_mp1(family, op, value)
+            else:
+                status = send_rsmu(family, op, value)
         except (OSError, struct.error, ctypes.ArgumentError):
             status = SMU_FAILED
-        out.append(("MP1" if is_mp1 else "RSMU", op, status))
+        mb_name = "HSMP" if use_hsmp else ("MP1" if is_mp1 else "RSMU")
+        out.append((mb_name, op, status))
     return out
 
 
@@ -237,3 +252,49 @@ def read_pm_core_sensors(family: str = ""):
         return None
     data, ver = r
     return read_core_sensors(data, ver)
+
+
+def read_smn(addr: int) -> int:
+    if not ensure_backend():
+        return 0
+    fn = getattr(_backend(), "read_smn", None)
+    try:
+        return fn(addr) if fn else 0
+    except OSError:
+        return 0
+
+
+def write_smn(addr: int, value: int) -> None:
+    if not ensure_backend():
+        return
+    fn = getattr(_backend(), "write_smn", None)
+    if fn:
+        try:
+            fn(addr, value)
+        except OSError:
+            pass
+
+
+def get_ccd_count(family_int: int = 0, model_int: int = 0) -> int:
+    if not ensure_backend():
+        return 1
+    if not family_int or not model_int:
+        from zenmaster import hardware
+        info = hardware.detect()
+        family_int = info.cpu_family_int
+        model_int = info.cpu_model_int
+    ccd_fuse1 = 0x5D218
+    ccd_fuse2 = 0x5D21C
+    if family_int == 23 and model_int != 113:
+        ccd_fuse1 += 0x40
+        ccd_fuse2 += 0x40
+    try:
+        present = read_smn(ccd_fuse1)
+        down = read_smn(ccd_fuse2)
+        disabled = ((down & 0x3F) << 2) | ((present >> 30) & 0x3)
+        enabled = ((present >> 22) & 0xFF) & ~disabled
+        count = enabled.bit_count()
+        return count if count > 0 else 1
+    except OSError:
+        return 1
+

@@ -1,12 +1,12 @@
 from __future__ import annotations
 import threading
 
-from zenmaster import directhw, iokit
+from zenmaster import directhw, iopci
 from zenmaster.hardware import _sysctl_str
 from zenmaster.errors import BackendUnavailable, SMUNotInitialized
 from zenmaster.pmtable import PM_TABLE_CMDS, TABLE_SIZES, DEFAULT_TABLE_SIZE
 from zenmaster.mailbox import (
-    MP1, MP1_DEFAULT, RSMU, RSMU_DEFAULT,
+    MP1, MP1_DEFAULT, RSMU, RSMU_DEFAULT, HSMP, HSMP_DEFAULT,
     mailbox_send, mailbox_query, transfer_with_retry,
 )
 from zenmaster.smu import SMU_OK, ModuleStatus
@@ -58,7 +58,7 @@ def module_status() -> ModuleStatus:
 
 
 def is_available() -> bool:
-    return directhw.is_loaded() or iokit.is_available()
+    return directhw.is_loaded() or iopci.is_available()
 
 
 def init() -> str:
@@ -70,7 +70,7 @@ def init() -> str:
     if _force == "iopci":
         if not _debug_boot_arg_ok():
             raise BackendUnavailable(_IOPCI_DEBUG_MSG)
-        if not iokit.open():
+        if not iopci.open():
             raise BackendUnavailable(
                 "IOPCIBridge could not be opened for the --iopci path.\n"
                 "Run as root (sudo)."
@@ -84,7 +84,7 @@ def init() -> str:
         _backend = "directhw"
         return _backend
 
-    if _debug_boot_arg_ok() and iokit.open():
+    if _debug_boot_arg_ok() and iopci.open():
         DRIVER_NAME = "IOKit PCI"
         _backend = "iopci"
         return _backend
@@ -115,14 +115,14 @@ def _cfg_addr(reg: int) -> int:
 
 def _pci_cfg_read(reg: int) -> int:
     if _backend == "iopci":
-        return iokit.read_config(reg, 4)
+        return iopci.read_config(reg, 4)
     directhw.write_io(PCI_ADDR, 4, _cfg_addr(reg))
     return directhw.read_io(PCI_DATA, 4)
 
 
 def _pci_cfg_write(reg: int, value: int) -> None:
     if _backend == "iopci":
-        iokit.write_config(reg, 4, value)
+        iopci.write_config(reg, 4, value)
         return
     directhw.write_io(PCI_ADDR, 4, _cfg_addr(reg))
     directhw.write_io(PCI_DATA, 4, value)
@@ -183,6 +183,26 @@ def query_rsmu(family: str, op: int, arg0: int = 0) -> tuple[int, list[int]]:
     return _query(RSMU, RSMU_DEFAULT, family, op, arg0)
 
 
+def send_hsmp(family: str, op: int, arg0: int = 0) -> int:
+    return _send(HSMP, HSMP_DEFAULT, family, op, arg0)
+
+
+def query_hsmp(family: str, op: int, arg0: int = 0) -> tuple[int, list[int]]:
+    return _query(HSMP, HSMP_DEFAULT, family, op, arg0)
+
+
+def read_smn(addr: int) -> int:
+    _require_init()
+    with _lock:
+        return _smn_read(addr)
+
+
+def write_smn(addr: int, value: int) -> None:
+    _require_init()
+    with _lock:
+        _smn_write(addr, value)
+
+
 def pm_table_supported(family: str = "") -> bool:
     return _backend != "iopci" and family in PM_TABLE_CMDS
 
@@ -236,5 +256,5 @@ def read_pm_table(family: str = "") -> bytes | None:
 def close() -> None:
     global _backend
     directhw.close()
-    iokit.close()
+    iopci.close()
     _backend = None

@@ -8,7 +8,7 @@ import threading
 from zenmaster.errors import BackendUnavailable, SMUNotInitialized
 from zenmaster.pmtable import PM_TABLE_CMDS, TABLE_SIZES, DEFAULT_TABLE_SIZE
 from zenmaster.mailbox import (
-    MP1, MP1_DEFAULT, RSMU, RSMU_DEFAULT,
+    MP1, MP1_DEFAULT, RSMU, RSMU_DEFAULT, HSMP, HSMP_DEFAULT,
     mailbox_send, mailbox_query, transfer_with_retry,
 )
 from zenmaster.smu import SMU_OK, ModuleStatus
@@ -261,6 +261,26 @@ def query_mp1(family: str, op: int, arg0: int = 0) -> tuple[int, list[int]]:
 
 def query_rsmu(family: str, op: int, arg0: int = 0) -> tuple[int, list[int]]:
     return _query(RSMU, RSMU_DEFAULT, family, op, arg0)
+
+
+def send_hsmp(family: str, op: int, arg0: int = 0) -> int:
+    return _send(HSMP, HSMP_DEFAULT, family, op, arg0)
+
+
+def query_hsmp(family: str, op: int, arg0: int = 0) -> tuple[int, list[int]]:
+    return _query(HSMP, HSMP_DEFAULT, family, op, arg0)
+
+
+def read_smn(addr: int) -> int:
+    _require_init()
+    with _lock:
+        return _smn_read(addr)
+
+
+def write_smn(addr: int, value: int) -> None:
+    _require_init()
+    with _lock:
+        _smn_write(addr, value)
 
 
 def pm_table_supported(family: str = "") -> bool:

@@ -135,6 +135,7 @@ def _resolve_codename(cpu_name: str, cpu_family: int, cpu_model: int) -> tuple[s
             case 17 | 18:   family = "RavenRidge"
             case 24:        family = "Picasso"
             case 32:        family = "Pollock" if any(s in cpu_name for s in ("15e", "15Ce", "20e")) else "Dali"
+            case 49:        family = "CastlePeak"
             case 80:        family = "FireFlight"
             case 96:        family = "Renoir"
             case 104:       family = "Lucienne"
@@ -145,7 +146,9 @@ def _resolve_codename(cpu_name: str, cpu_family: int, cpu_model: int) -> tuple[s
     elif cpu_family == 25:
         arch = "Zen 3 - Zen 4"
         match cpu_model:
-            case 33:        family = "Vermeer"
+            case 8:         family = "Chagall"
+            case 24:        family = "StormPeak"
+            case 32 | 33:   family = "Vermeer"
             case 64 | 68:   family = "Rembrandt"
             case 80:        family = "Cezanne_Barcelo"
             case 97:        family = "DragonRange" if "HX" in cpu_name else "Raphael"
@@ -162,13 +165,16 @@ def _resolve_codename(cpu_name: str, cpu_family: int, cpu_model: int) -> tuple[s
             case 104:       family = "KrackanPoint2"
             case 32 | 36:   family = "StrixPoint"
             case 112:       family = "StrixHalo"
+            case m if 128 <= m <= 135: family = "Medusa1"
+            case m if 136 <= m <= 143: family = "OlympicRidge"
+            case m if 224 <= m <= 227: family = "Medusa2"
 
     return arch, family
 
 
 _DESKTOP_FAMILIES = {
-    "SummitRidge", "PinnacleRidge", "Matisse",
-    "Vermeer", "Raphael", "GraniteRidge",
+    "SummitRidge", "PinnacleRidge", "Matisse", "CastlePeak",
+    "Vermeer", "Chagall", "StormPeak", "Raphael", "GraniteRidge", "OlympicRidge",
 }
 
 

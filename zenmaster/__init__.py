@@ -9,9 +9,10 @@ from zenmaster.smu import (
     SmuStatus, ModuleStatus, module_status, module_version, module_version_ok,
     secure_boot_enabled, is_available, init, close, ensure_backend, read_pm_sensors,
     send_arg, unavailable_reason, driver_name, active_backend, pm_table_supported,
-    send_mp1, send_rsmu, query_mp1, query_rsmu,
+    send_mp1, send_rsmu, send_hsmp, query_mp1, query_rsmu, query_hsmp,
     read_pm_table, read_pm_table_version, read_pm_table_full,
     get_bios_if_ver, get_smu_version, format_smu_version, read_pm_core_sensors,
+    read_smn, write_smn, get_ccd_count,
 )
 from zenmaster.errors import (
     ZenMasterError, BackendUnavailable, SMUNotInitialized, UnsupportedCPU,
@@ -24,13 +25,15 @@ except PackageNotFoundError:
 
 __all__ = [
     "CpuInfo", "detect", "resolve", "apply", "ApplyResult", "runner", "smu", "table",
-    "SmuStatus", "PmSensors", "read_sensors", "read_pm_sensors", "ModuleStatus",
-    "module_status", "module_version", "module_version_ok", "secure_boot_enabled",
-    "is_available", "init", "close", "ensure_backend", "send_arg", "unavailable_reason",
-    "driver_name", "active_backend", "pm_table_supported", "send_mp1", "send_rsmu",
-    "query_mp1", "query_rsmu", "read_pm_table", "read_pm_table_version", "read_pm_table_full",
-    "get_bios_if_ver", "get_smu_version", "format_smu_version",
-    "CoreSensors", "read_core_sensors", "read_pm_core_sensors",
-    "check_update", "ZenMasterError", "BackendUnavailable", "SMUNotInitialized",
-    "UnsupportedCPU", "__version__",
+    "SmuStatus", "PmSensors", "read_sensors", "read_pm_sensors",
+    "ModuleStatus", "module_status", "module_version", "module_version_ok",
+    "secure_boot_enabled", "is_available", "init", "close", "ensure_backend",
+    "send_arg", "unavailable_reason", "driver_name", "active_backend",
+    "pm_table_supported", "send_mp1", "send_rsmu", "send_hsmp", "query_mp1",
+    "query_rsmu", "query_hsmp", "read_pm_table", "read_pm_table_version",
+    "read_pm_table_full", "get_bios_if_ver", "get_smu_version", "format_smu_version",
+    "CoreSensors", "read_core_sensors", "read_pm_core_sensors", "check_update",
+    "read_smn", "write_smn", "get_ccd_count",
+    "ZenMasterError", "BackendUnavailable", "SMUNotInitialized", "UnsupportedCPU",
+    "__version__",
 ]

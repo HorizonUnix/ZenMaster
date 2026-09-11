@@ -41,6 +41,13 @@ RSMU: dict[str, tuple[int, int, int]] = {
 }
 RSMU_DEFAULT = (0x3B10A20, 0x3B10A80, 0x3B10A88)
 
+HSMP: dict[str, tuple[int, int, int]] = {
+    "Medusa1":      (0x3B10A8C, 0x3B10A90, 0x3B10A94),
+    "OlympicRidge": (0x3B10A8C, 0x3B10A90, 0x3B10A94),
+    "Medusa2":      (0x3B10A8C, 0x3B10A90, 0x3B10A94),
+}
+HSMP_DEFAULT = (0x3B10A8C, 0x3B10A90, 0x3B10A94)
+
 
 def poll_response(smn_read, rsp: int, poll_n: int, fast_poll: int, poll_sleep: float) -> int:
     for i in range(poll_n):

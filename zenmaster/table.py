@@ -9,28 +9,28 @@ _VRM_V2 = {0x00370000, 0x00370001, 0x00370002, 0x00370003, 0x00370004, 0x0037000
             0x00400001, 0x00400002, 0x00400003, 0x00400004, 0x00400005,
             0x00450004, 0x00450005,
             0x004C0006, 0x004C0007, 0x004C0008, 0x004C0009}
-_VRM_V3 = {0x005D0008, 0x005D0009, 0x005D000B, 0x00650005}
+_VRM_V3 = {0x005D0008, 0x005D0009, 0x005D000B, 0x00650005, 0x00650007}
 
-_TCTL_V1 = _VRM_V1 | {0x0064020C}
+_TCTL_V1 = _VRM_V1 | {0x0064010C, 0x0064020C}
 _TCTL_V2 = {0x00370000, 0x00370001, 0x00370002, 0x00370003, 0x00370004, 0x00370005,
              0x003F0000, 0x00400001, 0x00400002, 0x00400003, 0x00400004, 0x00400005,
              0x00450004, 0x00450005,
              0x004C0006, 0x004C0007, 0x004C0008, 0x004C0009,
-             0x005D0008, 0x005D0009, 0x005D000B, 0x00650005}
+             0x005D0008, 0x005D0009, 0x005D000B, 0x00650005, 0x00650007}
 
-_APU_SLOW_VERS = _VRM_V2 | {0x003F0000, 0x005D0008, 0x005D0009, 0x005D000B, 0x0064020C, 0x00650005}
+_APU_SLOW_VERS = _VRM_V2 | {0x003F0000, 0x005D0008, 0x005D0009, 0x005D000B, 0x0064010C, 0x0064020C, 0x00650005, 0x00650007}
 
 _SKIN_APU_VERS = {0x00370000, 0x00370001, 0x00370002, 0x00370003, 0x00370004, 0x00370005,
                   0x003F0000, 0x00400001, 0x00400002, 0x00400003, 0x00400004, 0x00400005,
                   0x00450004, 0x00450005,
                   0x004C0006, 0x004C0007, 0x004C0008, 0x004C0009,
-                  0x005D0008, 0x005D0009, 0x005D000B, 0x0064020C}
+                  0x005D0008, 0x005D0009, 0x005D000B, 0x0064010C, 0x0064020C, 0x00650005, 0x00650007}
 
 _SKIN_DGPU_V2 = {0x00370000, 0x00370001, 0x00370002, 0x00370003, 0x00370004, 0x00370005,
                  0x00400001, 0x00400002, 0x00400003, 0x00400004, 0x00400005,
                  0x00450004, 0x00450005,
-                 0x004C0006, 0x004C0007, 0x004C0008, 0x004C0009, 0x0064020C}
-_SKIN_DGPU_V3 = {0x005D0008, 0x005D0009, 0x005D000B}
+                 0x004C0006, 0x004C0007, 0x004C0008, 0x004C0009, 0x0064010C, 0x0064020C}
+_SKIN_DGPU_V3 = {0x005D0008, 0x005D0009, 0x005D000B, 0x00650005, 0x00650007}
 
 _STAPM_TIME: dict[int, int] = {
     0x001E0002: 0x564, 0x001E0003: 0x55C, 0x001E0004: 0x5E0, 0x001E0005: 0x5E0,
@@ -90,7 +90,7 @@ _GFX_CLK: dict[int, int] = {
     0x003F0000: 0x388,
     0x005D0008: 0x4C0, 0x005D0009: 0x4C0, 0x005D000B: 0x4C0,
     0x00650005: 0x4C0, 0x00650007: 0x4C0,
-    0x0064020C: 0x558,
+    0x0064010C: 0x558, 0x0064020C: 0x558,
 }
 _GFX_TEMP: dict[int, int] = {
     0x00370000: 0x5AC, 0x00370001: 0x5AC, 0x00370002: 0x5AC, 0x00370003: 0x5AC,
@@ -100,7 +100,7 @@ _GFX_TEMP: dict[int, int] = {
     0x003F0000: 0x380,
     0x005D0008: 0x4B8, 0x005D0009: 0x4B8, 0x005D000B: 0x4B8,
     0x00650005: 0x4B8, 0x00650007: 0x4B8,
-    0x0064020C: 0x550,
+    0x0064010C: 0x550, 0x0064020C: 0x550,
 }
 _MEM_CLK: dict[int, int] = {
     0x00370000: 0x5D4, 0x00370001: 0x5D4, 0x00370002: 0x5D4, 0x00370003: 0x5D4,
@@ -114,7 +114,7 @@ _GFX_POWER: dict[int, int] = {
     0x00620105: 0x1AC,
     0x005D0008: 0x4B4, 0x005D0009: 0x4B4, 0x005D000B: 0x4B4,
     0x00650005: 0x4B4, 0x00650007: 0x4B4,
-    0x0064020C: 0x54C,
+    0x0064010C: 0x54C, 0x0064020C: 0x54C,
 }
 _GFX_VOLT: dict[int, int] = {
     0x00370000: 0x5A8, 0x00370001: 0x5A8, 0x00370002: 0x5A8, 0x00370003: 0x5A8,
@@ -122,7 +122,7 @@ _GFX_VOLT: dict[int, int] = {
     0x00400001: 0x600, 0x00400002: 0x618, 0x00400003: 0x638,
     0x00400004: 0x63C, 0x00400005: 0x63C,
     0x003F0000: 0x37C,
-    0x0064020C: 0x54C,
+    0x0064010C: 0x54C, 0x0064020C: 0x54C,
 }
 
 
@@ -575,7 +575,7 @@ def read_core_sensors(data: bytes, ver: int) -> list[CoreSensors]:
         v = struct.unpack_from("<f", data, off)[0]
         return None if math.isnan(v) else v
 
-    if ver in (0x00540004, 0x00620205, 0x0064020C):
+    if ver in (0x00540004, 0x00620205, 0x0064010C, 0x0064020C):
         core_count = 16
     elif ver == 0x00620105:
         core_count = 8
@@ -594,7 +594,7 @@ def read_core_sensors(data: bytes, ver: int) -> list[CoreSensors]:
         elif ver in (0x00400004, 0x00400005): p_base = 0x320
         elif ver == 0x001E0004 and c < 4: p_base = 0x180
         elif ver in (0x005D0008, 0x005D0009, 0x005D000B, 0x00650007): p_base = 0x9D4
-        elif ver == 0x0064020C: p_base = 0xB90
+        elif ver in (0x0064010C, 0x0064020C): p_base = 0xB90
         elif ver == 0x00620105 and c < 8: p_base = 0x534
         elif ver in (0x00540004, 0x00540104): p_base = 0x494
         elif ver == 0x00620205: p_base = 0x4B4
@@ -611,7 +611,7 @@ def read_core_sensors(data: bytes, ver: int) -> list[CoreSensors]:
         elif ver in (0x00400004, 0x00400005): v_base = 0x340
         elif ver == 0x001E0004 and c < 4: v_base = 0x1A0
         elif ver in (0x005D0008, 0x005D0009, 0x005D000B, 0x00650007): v_base = 0xA04
-        elif ver == 0x0064020C: v_base = 0xBD0
+        elif ver in (0x0064010C, 0x0064020C): v_base = 0xBD0
         elif ver == 0x00620105 and c < 8: v_base = 0x4D4
         elif ver == 0x00540004: v_base = 0x4D4
         elif ver == 0x00540104: v_base = 0x4B4
@@ -626,7 +626,7 @@ def read_core_sensors(data: bytes, ver: int) -> list[CoreSensors]:
         elif ver in (0x00400004, 0x00400005): t_base = 0x360
         elif ver == 0x001E0004 and c < 4: t_base = 0x624
         elif ver in (0x005D0008, 0x005D0009, 0x005D000B, 0x00650007): t_base = 0xA34
-        elif ver == 0x0064020C: t_base = 0xC10
+        elif ver in (0x0064010C, 0x0064020C): t_base = 0xC10
         elif ver == 0x00620105 and c < 8: t_base = 0x4F4
         elif ver == 0x00540004: t_base = 0x514
         elif ver == 0x00540104: t_base = 0x4D4
@@ -646,7 +646,7 @@ def read_core_sensors(data: bytes, ver: int) -> list[CoreSensors]:
             elif ver == 0x003F0000 and c < 4: clk_base = 0x288
             elif ver in (0x00400004, 0x00400005): clk_base = 0x3c0
             elif ver in (0x005D0008, 0x005D0009, 0x005D000B, 0x00650007): clk_base = 0xA64
-            elif ver == 0x0064020C: clk_base = 0xc50
+            elif ver in (0x0064010C, 0x0064020C): clk_base = 0xc50
             elif ver == 0x00620105 and c < 8: clk_base = 0x514
             elif ver == 0x00540004: clk_base = 0x554
             elif ver == 0x00540104: clk_base = 0x4F4
@@ -660,7 +660,7 @@ def read_core_sensors(data: bytes, ver: int) -> list[CoreSensors]:
 
         fe_base = None
         if ver in (0x005D0008, 0x005D0009, 0x005D000B, 0x00650007): fe_base = 0xA94
-        elif ver == 0x0064020C: fe_base = 0xC90
+        elif ver in (0x0064010C, 0x0064020C): fe_base = 0xC90
         elif ver == 0x00540004: fe_base = 0x594
         elif ver == 0x00540104: fe_base = 0x514
         elif ver == 0x00620205: fe_base = 0x5B4
@@ -669,7 +669,7 @@ def read_core_sensors(data: bytes, ver: int) -> list[CoreSensors]:
 
         c0_base = None
         if ver in (0x005D0008, 0x005D0009, 0x005D000B, 0x00650007): c0_base = 0xAB4
-        elif ver == 0x0064020C: c0_base = 0xCD0
+        elif ver in (0x0064010C, 0x0064020C): c0_base = 0xCD0
         elif ver == 0x00620105 and c < 8: c0_base = 0x594
         elif ver == 0x00540004: c0_base = 0x5D4
         elif ver == 0x00540104: c0_base = 0x534
@@ -679,7 +679,7 @@ def read_core_sensors(data: bytes, ver: int) -> list[CoreSensors]:
 
         cc1_base = None
         if ver in (0x005D0008, 0x005D0009, 0x005D000B, 0x00650007): cc1_base = 0xAD4
-        elif ver == 0x0064020C: cc1_base = 0xD10
+        elif ver in (0x0064010C, 0x0064020C): cc1_base = 0xD10
         elif ver == 0x00620105 and c < 8: cc1_base = 0x5B4
         elif ver == 0x00540004: cc1_base = 0x614
         elif ver == 0x00540104: cc1_base = 0x554
@@ -689,7 +689,7 @@ def read_core_sensors(data: bytes, ver: int) -> list[CoreSensors]:
 
         cc6_base = None
         if ver in (0x005D0008, 0x005D0009, 0x005D000B, 0x00650007): cc6_base = 0xAF4
-        elif ver == 0x0064020C: cc6_base = 0xD50
+        elif ver in (0x0064010C, 0x0064020C): cc6_base = 0xD50
         elif ver == 0x00620105 and c < 8: cc6_base = 0x574
         elif ver == 0x00540004: cc6_base = 0x654
         elif ver == 0x00540104: cc6_base = 0x574
