@@ -1,11 +1,14 @@
 from __future__ import annotations
 import ctypes
 import time
+from typing import Any
 
-from zenmaster import iokitcore
+from zenmaster import iokit
 
 DRIVER_NAME = "DirectHW"
 _SERVICE    = b"DirectHWService"
+_PCI_ADDR: int = 0xCF8
+_PCI_DATA: int = 0xCFC
 
 _kReadIO     = 0
 _kWriteIO    = 1
@@ -34,7 +37,7 @@ _connect: int | None = None
 _map_memory_bound = False
 
 
-def _bind_map_memory(iokit) -> None:
+def _bind_map_memory(iokit: Any) -> None:
     global _map_memory_bound
     if _map_memory_bound:
         return
@@ -52,21 +55,21 @@ def _bind_map_memory(iokit) -> None:
 
 
 def is_loaded() -> bool:
-    return iokitcore.service_available(_SERVICE)
+    return iokit.service_available(_SERVICE)
 
 
 def open() -> bool:
     global _connect
     if _connect is not None:
         return True
-    _connect = iokitcore.open_service(_SERVICE)
+    _connect = iokit.open_service(_SERVICE)
     return _connect is not None
 
 
 def close() -> None:
     global _connect
     if _connect is not None:
-        iokitcore.close_service(_connect)
+        iokit.close_service(_connect)
         _connect = None
 
 
@@ -75,7 +78,7 @@ def read_io(port: int, width: int = 4) -> int:
         return 0
     inp = _iomem_t(offset=port, width=width, data=0)
     out = _iomem_t()
-    if not iokitcore.call_struct_method(_connect, _kReadIO, inp, out):
+    if not iokit.call_struct_method(_connect, _kReadIO, inp, out):
         return 0
     mask = (1 << (width * 8)) - 1
     return out.data & mask
@@ -86,33 +89,33 @@ def write_io(port: int, width: int, data: int) -> bool:
         return False
     inp = _iomem_t(offset=port, width=width, data=data & 0xFFFFFFFF)
     out = _iomem_t()
-    return iokitcore.call_struct_method(_connect, _kWriteIO, inp, out)
+    return iokit.call_struct_method(_connect, _kWriteIO, inp, out)
 
 
 def read_physical(phys: int, size: int) -> bytes | None:
     if _connect is None:
         return None
-    iokit = iokitcore.load()
-    _bind_map_memory(iokit)
+    iokit_lib = iokit.load()
+    _bind_map_memory(iokit_lib)
 
     inp = _map_t(addr=phys, size=size)
     out = _map_t()
-    if not iokitcore.call_struct_method(_connect, _kPrepareMap, inp, out):
+    if not iokit.call_struct_method(_connect, _kPrepareMap, inp, out):
         return None
 
     addr   = ctypes.c_uint64(0)
     mapped = ctypes.c_uint64(0)
-    err = iokit.IOConnectMapMemory(
-        _connect, 0, iokitcore.task_self(),
+    err = iokit_lib.IOConnectMapMemory(
+        _connect, 0, iokit.task_self(),
         ctypes.byref(addr), ctypes.byref(mapped),
         _kIOMapAnywhere | _kIOMapInhibitCache,
     )
-    if err != iokitcore.KERN_SUCCESS or not addr.value:
+    if err != iokit.KERN_SUCCESS or not addr.value:
         return None
     time.sleep(0.001)
     try:
         data = ctypes.string_at(addr.value, size)
     except (ValueError, OSError):
         data = None
-    iokit.IOConnectUnmapMemory(_connect, 0, iokitcore.task_self(), addr.value)
+    iokit_lib.IOConnectUnmapMemory(_connect, 0, iokit.task_self(), addr.value)
     return data

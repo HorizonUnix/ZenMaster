@@ -1,10 +1,13 @@
 from __future__ import annotations
+import fcntl
 import glob
 import os
 import struct
 import subprocess
 import threading
 import time
+from contextlib import contextmanager
+from typing import Any
 
 from zenmaster.errors import BackendUnavailable, SMUNotInitialized
 from zenmaster.pmtable import PM_TABLE_CMDS, TABLE_SIZES, DEFAULT_TABLE_SIZE
@@ -18,6 +21,67 @@ VERSION_PATH = DRIVER_PATH + "/drv_version"
 PCI_CONFIG   = "/sys/bus/pci/devices/0000:00:00.0/config"
 NB_ADDR      = 0xB8
 NB_DATA      = 0xBC
+
+PCI_MUTEX_NAME: str = "/run/lock/access_pci.lock"
+_PCI_MUTEX_FALLBACK: str = "/tmp/access_pci.lock"
+_PCI_MUTEX_TIMEOUT_MS: int = 5000
+
+
+def acquire_pci_mutex(timeout_ms: int = _PCI_MUTEX_TIMEOUT_MS) -> int | None:
+    path = PCI_MUTEX_NAME
+    fd = None
+    try:
+        fd = os.open(path, os.O_CREAT | os.O_RDWR, 0o666)
+    except (OSError, PermissionError):
+        try:
+            path = _PCI_MUTEX_FALLBACK
+            fd = os.open(path, os.O_CREAT | os.O_RDWR, 0o666)
+        except OSError:
+            return None
+    deadline = time.monotonic() + (timeout_ms / 1000.0)
+    while True:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return fd
+        except (BlockingIOError, OSError):
+            if time.monotonic() >= deadline:
+                try:
+                    os.close(fd)
+                except OSError:
+                    pass
+                return None
+            time.sleep(0.005)
+
+
+def release_pci_mutex(handle: Any) -> bool:
+    if handle is None:
+        return False
+    try:
+        fcntl.flock(handle, fcntl.LOCK_UN)
+        return True
+    except OSError:
+        return False
+
+
+def close_pci_mutex(handle: Any) -> bool:
+    if handle is None:
+        return False
+    try:
+        os.close(handle)
+        return True
+    except OSError:
+        return False
+
+
+@contextmanager
+def pci_mutex_guard(timeout_ms: int = _PCI_MUTEX_TIMEOUT_MS) -> Any:
+    h = acquire_pci_mutex(timeout_ms)
+    try:
+        yield h
+    finally:
+        if h is not None:
+            release_pci_mutex(h)
+            close_pci_mutex(h)
 
 MIN_VERSION = (0, 1, 7)
 
@@ -107,15 +171,16 @@ def _pci_writable() -> bool:
     if not os.path.exists(PCI_CONFIG):
         return False
     try:
-        fd = os.open(PCI_CONFIG, os.O_RDWR)
-        try:
-            os.lseek(fd, NB_ADDR, os.SEEK_SET)
-            os.write(fd, struct.pack("<I", 0x47))
-            os.lseek(fd, NB_ADDR, os.SEEK_SET)
-            data = os.read(fd, 4)
-            return len(data) >= 4 and struct.unpack("<I", data)[0] == 0x47
-        finally:
-            os.close(fd)
+        with pci_mutex_guard():
+            fd = os.open(PCI_CONFIG, os.O_RDWR)
+            try:
+                os.lseek(fd, NB_ADDR, os.SEEK_SET)
+                os.write(fd, struct.pack("<I", 0x47))
+                os.lseek(fd, NB_ADDR, os.SEEK_SET)
+                data = os.read(fd, 4)
+                return len(data) >= 4 and struct.unpack("<I", data)[0] == 0x47
+            finally:
+                os.close(fd)
     except OSError:
         return False
 
@@ -196,7 +261,7 @@ def _pci_write(fd: int, addr: int, value: int) -> None:
     os.write(fd, struct.pack("<I", value))
 
 
-def _send_seq(write, read, fd: int, msg: int, rsp: int, args: int, op: int, arg0: int) -> int:
+def _send_seq(write: Any, read: Any, fd: int, msg: int, rsp: int, args: int, op: int, arg0: int) -> int:
     write(fd, rsp, 0)
     write(fd, args, arg0)
     for i in range(1, NARGS):
@@ -220,7 +285,7 @@ def _require_init() -> None:
         raise SMUNotInitialized("SMU not initialized, call smu.init() first")
 
 
-def _io_primitives() -> tuple:
+def _io_primitives() -> tuple[Any, ...]:
     if _backend == "ryzen_smu":
         return _smn_write, _smn_read, SMN_PATH
     return _pci_write, _pci_read, PCI_CONFIG
@@ -238,8 +303,9 @@ def _send(table: dict, default: tuple, family: str, op: int, arg0: int) -> int:
     msg, rsp, args = table.get(family, default)
     write, read, path = _io_primitives()
     with _lock:
-        fd = _get_fd(path)
-        return _send_seq(write, read, fd, msg, rsp, args, op, arg0)
+        with pci_mutex_guard():
+            fd = _get_fd(path)
+            return _send_seq(write, read, fd, msg, rsp, args, op, arg0)
 
 
 def _query(table: dict, default: tuple, family: str, op: int, arg0: int) -> tuple[int, list[int]]:
@@ -247,9 +313,10 @@ def _query(table: dict, default: tuple, family: str, op: int, arg0: int) -> tupl
     msg, rsp, args = table.get(family, default)
     write, read, path = _io_primitives()
     with _lock:
-        fd = _get_fd(path)
-        status = _send_seq(write, read, fd, msg, rsp, args, op, arg0)
-        return status, [read(fd, args + i * 4) for i in range(NARGS)]
+        with pci_mutex_guard():
+            fd = _get_fd(path)
+            status = _send_seq(write, read, fd, msg, rsp, args, op, arg0)
+            return status, [read(fd, args + i * 4) for i in range(NARGS)]
 
 
 def send_mp1(family: str, op: int, arg0: int = 0) -> int:
@@ -281,8 +348,9 @@ def read_smn(addr: int) -> int:
     _, read, path = _io_primitives()
     try:
         with _lock:
-            fd = _get_fd(path)
-            return read(fd, addr)
+            with pci_mutex_guard():
+                fd = _get_fd(path)
+                return read(fd, addr)
     except OSError:
         return 0
 
@@ -292,10 +360,21 @@ def write_smn(addr: int, value: int) -> None:
     write, _, path = _io_primitives()
     try:
         with _lock:
-            fd = _get_fd(path)
-            write(fd, addr, value)
+            with pci_mutex_guard():
+                fd = _get_fd(path)
+                write(fd, addr, value)
     except OSError:
         pass
+
+
+def smu_command(msg_id: int, arg: int = 0) -> int:
+    _require_init()
+    msg, rsp, args = MP1_DEFAULT
+    write, read, path = _io_primitives()
+    with _lock:
+        with pci_mutex_guard():
+            fd = _get_fd(path)
+            return _send_seq(write, read, fd, msg, rsp, args, msg_id, arg)
 
 
 def pm_table_supported(family: str = "") -> bool:

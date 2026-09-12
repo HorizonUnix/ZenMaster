@@ -1,9 +1,11 @@
 from __future__ import annotations
+from contextlib import contextmanager
 import ctypes
 import ctypes.wintypes
 import os
 import struct
 import threading
+from typing import Any
 
 from zenmaster.errors import BackendUnavailable, SMUNotInitialized
 from zenmaster.pmtable import PM_TABLE_CMDS, TABLE_SIZES, DEFAULT_TABLE_SIZE
@@ -14,6 +16,8 @@ from zenmaster.mailbox import (
 from zenmaster.smu import SMU_OK, ModuleStatus
 
 DRIVER_NAME = "PawnIO"
+PCI_MUTEX_NAME: str = r"Global\Access_PCI"
+_PCI_MUTEX_TIMEOUT_MS: int = 5000
 _DEVICE_PATHS = [
     r"\\?\GLOBALROOT\Device\PawnIO",
     r"\\.\PawnIO",
@@ -80,7 +84,64 @@ def is_available() -> bool:
     return _pawnio_info() is not None
 
 
-def _make_k32():
+def acquire_pci_mutex(timeout_ms: int = _PCI_MUTEX_TIMEOUT_MS) -> Any:
+    if _k32 is None:
+        return None
+    create_fn = getattr(_k32, "CreateMutexW", None)
+    wait_fn = getattr(_k32, "WaitForSingleObject", None)
+    if not create_fn or not wait_fn:
+        return None
+    try:
+        h = create_fn(None, False, PCI_MUTEX_NAME)
+        if not h or h == ctypes.c_void_p(-1).value:
+            return None
+        res = wait_fn(h, timeout_ms)
+        if res in (0, 0x80):
+            return h
+        close_fn = getattr(_k32, "CloseHandle", None)
+        if close_fn:
+            close_fn(h)
+        return None
+    except Exception:
+        return None
+
+
+def release_pci_mutex(handle: Any) -> bool:
+    if _k32 is None or handle is None:
+        return False
+    rel_fn = getattr(_k32, "ReleaseMutex", None)
+    if not rel_fn:
+        return False
+    try:
+        return bool(rel_fn(handle))
+    except Exception:
+        return False
+
+
+def close_pci_mutex(handle: Any) -> bool:
+    if _k32 is None or handle is None:
+        return False
+    close_fn = getattr(_k32, "CloseHandle", None)
+    if not close_fn:
+        return False
+    try:
+        return bool(close_fn(handle))
+    except Exception:
+        return False
+
+
+@contextmanager
+def pci_mutex_guard(timeout_ms: int = _PCI_MUTEX_TIMEOUT_MS) -> Any:
+    h = acquire_pci_mutex(timeout_ms)
+    try:
+        yield h
+    finally:
+        if h is not None:
+            release_pci_mutex(h)
+            close_pci_mutex(h)
+
+
+def _make_k32() -> Any:
     k32    = ctypes.windll.kernel32
     HANDLE = ctypes.wintypes.HANDLE
     DWORD  = ctypes.wintypes.DWORD
@@ -96,10 +157,16 @@ def _make_k32():
     k32.CloseHandle.argtypes = [HANDLE]
     k32.GetLastError.restype  = DWORD
     k32.GetLastError.argtypes = []
+    k32.CreateMutexW.restype  = HANDLE
+    k32.CreateMutexW.argtypes = [ctypes.c_void_p, BOOL, ctypes.c_wchar_p]
+    k32.WaitForSingleObject.restype  = DWORD
+    k32.WaitForSingleObject.argtypes = [HANDLE, DWORD]
+    k32.ReleaseMutex.restype  = BOOL
+    k32.ReleaseMutex.argtypes = [HANDLE]
     return k32
 
 
-def _open_device(k32):
+def _open_device(k32: Any) -> Any:
     invalid = ctypes.c_void_p(-1).value
     for path in _DEVICE_PATHS:
         h = k32.CreateFileW(path, 0xC0000000, 0x3, None, 3, 0, None)
@@ -227,9 +294,10 @@ def _read_physical_memory(phys_addr: int, size: int) -> bytes | None:
 
 def _transfer_with_retry(msg: int, rsp: int, args_base: int, op: int, arg0: int = 0,
                          delays: tuple[float, ...] = (0.01, 0.1)) -> int:
-    def once():
+    def once() -> int:
         with _lock:
-            return _mailbox_send(msg, rsp, args_base, op, arg0)
+            with pci_mutex_guard():
+                return _mailbox_send(msg, rsp, args_base, op, arg0)
     return transfer_with_retry(once, delays)
 
 
@@ -237,14 +305,16 @@ def _send(table: dict, default: tuple, family: str, op: int, arg0: int) -> int:
     _require_init()
     msg, rsp, args = table.get(family, default)
     with _lock:
-        return _mailbox_send(msg, rsp, args, op, arg0)
+        with pci_mutex_guard():
+            return _mailbox_send(msg, rsp, args, op, arg0)
 
 
 def _query(table: dict, default: tuple, family: str, op: int, arg0: int) -> tuple[int, list[int]]:
     _require_init()
     msg, rsp, args = table.get(family, default)
     with _lock:
-        return _mailbox_query(msg, rsp, args, op, arg0)
+        with pci_mutex_guard():
+            return _mailbox_query(msg, rsp, args, op, arg0)
 
 
 def send_mp1(family: str, op: int, arg0: int = 0) -> int:
@@ -274,13 +344,23 @@ def query_hsmp(family: str, op: int, arg0: int = 0) -> tuple[int, list[int]]:
 def read_smn(addr: int) -> int:
     _require_init()
     with _lock:
-        return _smn_read(addr)
+        with pci_mutex_guard():
+            return _smn_read(addr)
 
 
 def write_smn(addr: int, value: int) -> None:
     _require_init()
     with _lock:
-        _smn_write(addr, value)
+        with pci_mutex_guard():
+            _smn_write(addr, value)
+
+
+def smu_command(msg_id: int, arg: int = 0) -> int:
+    _require_init()
+    msg, rsp, args = MP1_DEFAULT
+    with _lock:
+        with pci_mutex_guard():
+            return _mailbox_send(msg, rsp, args, msg_id, arg)
 
 
 def pm_table_supported(family: str = "") -> bool:
@@ -294,14 +374,16 @@ def read_pm_table_full(family: str = "") -> tuple[bytes, int] | None:
     msg, rsp, args_base = RSMU.get(family, RSMU_DEFAULT)
 
     with _lock:
-        status, out = _mailbox_query(msg, rsp, args_base, ver_op)
+        with pci_mutex_guard():
+            status, out = _mailbox_query(msg, rsp, args_base, ver_op)
     if status != SMU_OK or not out[0]:
         return None
     ver = out[0]
     size = TABLE_SIZES.get(ver, DEFAULT_TABLE_SIZE)
 
     with _lock:
-        status, out = _mailbox_query(msg, rsp, args_base, addr_op, extra)
+        with pci_mutex_guard():
+            status, out = _mailbox_query(msg, rsp, args_base, addr_op, extra)
     if status != SMU_OK:
         return None
     phys_addr = (out[1] << 32) | out[0] if addr_64bit else out[0]

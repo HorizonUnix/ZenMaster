@@ -1,5 +1,6 @@
 from __future__ import annotations
 import ctypes
+from typing import Any
 
 KERN_SUCCESS = 0
 
@@ -7,7 +8,7 @@ _iokit = None
 _task_self = 0
 
 
-def load():
+def load() -> Any:
     global _iokit, _task_self
     if _iokit is not None:
         return _iokit
@@ -81,7 +82,7 @@ def close_service(connect: int) -> None:
         _iokit.IOServiceClose(connect)
 
 
-def call_struct_method(connect: int, selector: int, in_struct, out_struct) -> bool:
+def call_struct_method(connect: int, selector: int, in_struct: Any, out_struct: Any) -> bool:
     iokit = load()
     if iokit is None:
         return False

@@ -203,13 +203,20 @@ def write_smn(addr: int, value: int) -> None:
         _smn_write(addr, value)
 
 
+def smu_command(msg_id: int, arg: int = 0) -> int:
+    _require_init()
+    msg, rsp, args = MP1_DEFAULT
+    with _lock:
+        return _mailbox_send(msg, rsp, args, msg_id, arg)
+
+
 def pm_table_supported(family: str = "") -> bool:
     return _backend != "iopci" and family in PM_TABLE_CMDS
 
 
 def _transfer_with_retry(msg: int, rsp: int, args_base: int, op: int, arg0: int = 0,
                          delays: tuple[float, ...] = (0.01, 0.1)) -> int:
-    def once():
+    def once() -> int:
         with _lock:
             return _mailbox_send(msg, rsp, args_base, op, arg0)
     return transfer_with_retry(once, delays)

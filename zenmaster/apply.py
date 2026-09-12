@@ -20,11 +20,18 @@ _APU_SKIN_FAMILIES = {
     "Renoir", "Lucienne", "Cezanne_Barcelo", "VanGogh",
     "Rembrandt", "Mendocino", "PhoenixPoint", "PhoenixPoint2",
     "HawkPoint", "HawkPoint2",
+    "StrixPoint", "KrackanPoint", "KrackanPoint2",
 }
 
 
 def _skin_scale(arg_name: str, value: int) -> int:
     return value * 256 if arg_name in _SKIN_ARGS else value
+
+
+def _co_scale(value: int) -> int:
+    if value < 0:
+        return (0x100000 - abs(int(value))) & 0xFFFFF
+    return int(value) & 0xFFFFF
 
 
 def _convert_hsmp_psm_margin(value: int) -> int:
@@ -36,6 +43,62 @@ def _convert_hsmp_psm_margin(value: int) -> int:
         margin = value
     clamped = max(-32768, min(32767, margin))
     return clamped & 0xFFFF
+
+
+def _pack_coper(val_str: str, use_hsmp: bool = False) -> int:
+    delims = (":", ",")
+    delim = next((d for d in delims if d in val_str), None)
+    if delim is not None:
+        parts = [int(p.strip(), 0) for p in val_str.split(delim)]
+        if len(parts) == 2:
+            core, offset = parts[0], parts[1]
+            ccd = 0
+        elif len(parts) == 3:
+            ccd, core, offset = parts[0], parts[1], parts[2]
+        elif len(parts) >= 4:
+            ccd, _, core, offset = parts[0], parts[1], parts[2], parts[3]
+        else:
+            offset = parts[0]
+            core = 0
+            ccd = 0
+        if use_hsmp:
+            apic_id = ((ccd << 4) | core) << 1
+            margin = _convert_hsmp_psm_margin(offset)
+            return ((apic_id & 0xFFFF) << 16) | (margin & 0xFFFF)
+        enc20 = _co_scale(offset)
+        ccx = core // 8
+        c = core % 8
+        prefix = ((((ccd & 0xF) << 4 | (ccx & 0xF)) << 4) | (c & 0xF)) << 20
+        return prefix | enc20
+    val = int(val_str, 0)
+    if use_hsmp:
+        return _convert_hsmp_psm_margin(val)
+    if val < 0:
+        return _co_scale(val)
+    return val & 0xFFFFFFFF
+
+
+def _pack_oc_clk_per_core(val_str: str) -> int:
+    delims = (":", ",")
+    delim = next((d for d in delims if d in val_str), None)
+    if delim is not None:
+        parts = [int(p.strip(), 0) for p in val_str.split(delim)]
+        if len(parts) == 2:
+            core, freq = parts[0], parts[1]
+            ccd = 0
+            ccx = core // 8
+        elif len(parts) == 3:
+            ccd, core, freq = parts[0], parts[1], parts[2]
+            ccx = core // 8
+        elif len(parts) >= 4:
+            ccd, ccx, core, freq = parts[0], parts[1], parts[2], parts[3]
+        else:
+            return parts[0] & 0xFFFFFFFF
+        freq_enc = min(freq, 8000) & 0xFFFFF
+        c = core % 8
+        prefix = ((c & 0xF) | ((ccx & 0xF) << 4) | ((ccd & 0xF) << 8)) << 20
+        return prefix | freq_enc
+    return int(val_str, 0) & 0xFFFFFFFF
 
 
 def _error(name: str, msg: str) -> ApplyResult:
@@ -75,6 +138,20 @@ def apply(args_str: str, family: str) -> tuple[list[ApplyResult], bool]:
             results.append(_error(name, f"--{name} requires a value"))
             had_rejection = True
             continue
+        elif name == "set-coper":
+            try:
+                value = _pack_coper(val_str, use_hsmp)
+            except ValueError:
+                results.append(_error(name, f"invalid value '{val_str}'"))
+                had_rejection = True
+                continue
+        elif name == "oc-clk-per-core":
+            try:
+                value = _pack_oc_clk_per_core(val_str)
+            except ValueError:
+                results.append(_error(name, f"invalid value '{val_str}'"))
+                had_rejection = True
+                continue
         else:
             try:
                 value = int(val_str, 0)
@@ -102,10 +179,17 @@ def apply(args_str: str, family: str) -> tuple[list[ApplyResult], bool]:
                 value //= 10
             if name in ("set-coall", "set-cogfx"):
                 smu_val = _convert_hsmp_psm_margin(value)
+            elif name in ("set-coper", "oc-clk-per-core"):
+                smu_val = value & 0xFFFFFFFF
             else:
                 smu_val = _skin_scale(name, value) & 0xFFFFFFFF
         else:
-            smu_val = _skin_scale(name, value) & 0xFFFFFFFF
+            if name in ("set-coall", "set-cogfx"):
+                smu_val = _co_scale(value)
+            elif name in ("set-coper", "oc-clk-per-core"):
+                smu_val = value & 0xFFFFFFFF
+            else:
+                smu_val = _skin_scale(name, value) & 0xFFFFFFFF
 
         is_query = name.startswith("get-")
         any_ok = False

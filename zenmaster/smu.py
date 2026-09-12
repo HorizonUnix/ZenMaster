@@ -4,6 +4,7 @@ import platform
 import struct
 from dataclasses import dataclass
 from enum import IntEnum
+from typing import Any
 
 _IS_WINDOWS = platform.system() == "Windows"
 _IS_MACOS   = platform.system() == "Darwin"
@@ -44,7 +45,7 @@ def status_name(code: int) -> str:
     return _STATUS_NAMES.get(code, f"0x{code:02X}")
 
 
-def _backend():
+def _backend() -> Any:
     if _IS_WINDOWS:
         from zenmaster import windows
         return windows
@@ -53,6 +54,19 @@ def _backend():
         return macos
     from zenmaster import linux
     return linux
+
+
+def smu_command(msg_id: int, arg: int = 0) -> int:
+    b = _backend() if callable(_backend) else _backend
+    fn = getattr(b, "smu_command", None)
+    if fn is not None:
+        return fn(msg_id, arg)
+    ensure_backend()
+    b = _backend() if callable(_backend) else _backend
+    fn = getattr(b, "smu_command", None)
+    if fn is not None:
+        return fn(msg_id, arg)
+    return SMU_FAILED
 
 
 def init() -> str:
@@ -162,8 +176,8 @@ def ensure_backend() -> str | None:
         return None
 
 
-def read_pm_sensors(family: str = ""):
-    from zenmaster.table import read_sensors
+def read_pm_sensors(family: str = "") -> dict[str, float] | None:
+    from zenmaster.sensors import read_sensors
     ensure_backend()
     r = read_pm_table_full(family)
     if not r:
@@ -244,8 +258,8 @@ def format_smu_version(ver: int) -> str:
     return f"{(ver >> 16) & 0xFF}.{(ver >> 8) & 0xFF}.{ver & 0xFF}"
 
 
-def read_pm_core_sensors(family: str = ""):
-    from zenmaster.table import read_core_sensors
+def read_pm_core_sensors(family: str = "") -> list[dict[str, float]] | None:
+    from zenmaster.sensors import read_core_sensors
     ensure_backend()
     r = read_pm_table_full(family)
     if not r:

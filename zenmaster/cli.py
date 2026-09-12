@@ -11,7 +11,7 @@ from dataclasses import asdict
 from zenmaster import __version__, runner, smu
 from zenmaster.apply import apply
 from zenmaster.hardware import CpuInfo, detect
-from zenmaster.table import read_table
+from zenmaster.sensors import read_table
 
 _CATEGORIES: dict[str, list[str]] = {
     "Power limits":    ["stapm-limit", "fast-limit", "slow-limit", "ppt-limit",
@@ -23,7 +23,7 @@ _CATEGORIES: dict[str, list[str]] = {
                         "vrmsoc-current", "vrmsocmax-current", "vrmcvip-current",
                         "vrmgfx-current", "vrmgfxmax-current", "psi0-current",
                         "psi0soc-current", "psi3cpu-current", "psi3gfx-current",
-                        "prochot-deassertion-ramp"],
+                        "prochot-deassertion-ramp", "disable-prochot"],
     "Clocks":          ["max-cpuclk", "min-cpuclk", "max-gfxclk", "min-gfxclk",
                         "gfx-clk", "max-socclk-frequency", "min-socclk-frequency",
                         "max-fclk-frequency", "min-fclk-frequency",
@@ -34,9 +34,11 @@ _CATEGORIES: dict[str, list[str]] = {
     "Overclocking":    ["enable-oc", "disable-oc", "oc-volt", "pbo-scalar",
                         "fit-limit-scalar", "set-coall", "set-coper", "set-cogfx",
                         "set-gpuclockoverdrive-byvid", "disable-gpuclockoverdrive",
-                        "extra-psm-guardband", "extra-psm-guardband-gfx"],
+                        "extra-psm-guardband", "extra-psm-guardband-gfx",
+                        "set-fll-btc-enable", "set-vddoff-vid", "set-ulv-vid"],
     "Power states":    ["power-saving", "max-performance",
-                        "enable-feature", "disable-feature"],
+                        "enable-feature", "disable-feature",
+                        "setcpu-freqto-ramstate", "stopcpu-freqto-ramstate"],
     "Query / get":     ["test", "get-pbo-scalar", "get-sustained-power-and-thm-limit",
                         "get-overclocking-support", "get-max-cpu-clk",
                         "get-min-gfx-clk", "get-max-gfx-clk", "get-curr-gfx-clk",
@@ -48,10 +50,7 @@ _CATEGORIES: dict[str, list[str]] = {
                         "get-pbo-fused-fast-limit", "get-pbo-fused-apu-slow-limit",
                         "get-pbo-fused-vrmtdc-limit", "get-pbo-fused-vrmsoc-current",
                         "get-pbo-fused-tctl-temp", "get-coper-options",
-                        "get-cogfx-options", "disable-prochot",
-                        "set-fll-btc-enable", "set-vddoff-vid",
-                        "set-ulv-vid", "setcpu-freqto-ramstate",
-                        "stopcpu-freqto-ramstate"],
+                        "get-cogfx-options"],
 }
 
 _ARG_UNITS: dict[str, str] = {
@@ -72,6 +71,12 @@ _ARG_UNITS: dict[str, str] = {
     "gfx-clk": "MHz", "max-socclk-frequency": "MHz", "min-socclk-frequency": "MHz",
     "max-fclk-frequency": "MHz", "min-fclk-frequency": "MHz",
     "oc-volt": "mV",
+    "set-boost-limit-frequency": "MHz",
+    "set-vmin-freq": "MHz",
+    "max-vcn": "MHz",
+    "min-vcn": "MHz",
+    "max-lclk": "MHz",
+    "min-lclk": "MHz",
 }
 
 _ARG_DESCS: dict[str, str] = {
@@ -290,12 +295,33 @@ def _show_info(info: CpuInfo, backend: str | None, json_out: bool) -> None:
     socket = runner.get_socket(info.family) or "unknown"
     bios_ver = 0
     smu_ver = 0
+    ccd_count = 0
     if backend is not None:
         try:
             bios_ver = smu.get_bios_if_ver(info.family)
             smu_ver = smu.get_smu_version(info.family)
+            ccd_count = smu.get_ccd_count(info.cpu_family_int, info.cpu_model_int)
         except Exception:
             pass
+    elif info.type == "Amd_Apu":
+        ccd_count = 1
+
+    pm_supported = smu.pm_table_supported(info.family)
+    pm_ver = 0
+    pm_size = 0
+    if backend is not None and pm_supported:
+        try:
+            from zenmaster.pmtable import TABLE_SIZES, DEFAULT_TABLE_SIZE
+            pm_ver = smu.read_pm_table_version(info.family)
+            if pm_ver:
+                pm_size = TABLE_SIZES.get(pm_ver, DEFAULT_TABLE_SIZE)
+        except Exception:
+            pass
+    sec_boot = smu.secure_boot_enabled()
+    tuning_args = runner.get_supported_args(info.family)
+    tuning_count = len(tuning_args)
+    is_server_hsmp = runner.is_hsmp(info.family)
+    mailbox_desc = "HSMP (Server)" if is_server_hsmp else "MP1 / RSMU"
 
     if json_out:
         out = {
@@ -307,7 +333,17 @@ def _show_info(info: CpuInfo, backend: str | None, json_out: bool) -> None:
             "cpu_family_int": info.cpu_family_int,
             "cpu_model_int": info.cpu_model_int,
             "cpu_stepping_int": info.cpu_stepping_int,
+            "pm_table_supported": pm_supported,
+            "secure_boot": sec_boot,
+            "tuning_args_count": tuning_count,
+            "mailbox": "HSMP" if is_server_hsmp else "MP1/RSMU",
         }
+        if pm_ver:
+            out["pm_table_version"] = f"0x{pm_ver:08X}"
+        if pm_size:
+            out["pm_table_size"] = pm_size
+        if ccd_count:
+            out["ccd_count"] = ccd_count
         if backend is not None:
             st = smu.module_status()
             out["backend"] = backend
@@ -325,13 +361,24 @@ def _show_info(info: CpuInfo, backend: str | None, json_out: bool) -> None:
                 out["smu_version_hex"] = f"0x{smu_ver:08X}"
         print(json.dumps(out, indent=2))
     else:
-        print(f"Name   : {info.name}")
-        print(f"Family : {info.family}  ({info.arch})")
-        print(f"Type   : {info.type}")
-        print(f"Socket : {socket}")
+        print(f"Name       : {info.name}")
+        print(f"Family     : {info.family}  ({info.arch})")
+        print(f"Type       : {info.type}")
+        print(f"Socket     : {socket}")
+        if ccd_count:
+            print(f"CCDs       : {ccd_count}")
+        print(f"CPUID      : Family {info.cpu_family_int} (0x{info.cpu_family_int:02X}), Model {info.cpu_model_int} (0x{info.cpu_model_int:02X}), Stepping {info.cpu_stepping_int}")
+        if pm_supported:
+            pm_desc = f"Supported (0x{pm_ver:08X}, {pm_size} bytes)" if pm_ver and pm_size else "Supported"
+        else:
+            pm_desc = "Unsupported"
+        print(f"PM Table   : {pm_desc}")
+        print(f"Secure Boot: {'Enabled' if sec_boot else 'Disabled'}")
+        print(f"Tuning     : {tuning_count} commands supported")
+        print(f"Mailbox    : {mailbox_desc}")
         if backend is not None:
-            print(f"Backend: {backend}")
-            print(f"Driver : {_driver_line(backend)}")
+            print(f"Backend    : {backend}")
+            print(f"Driver     : {_driver_line(backend)}")
             if bios_ver:
                 print(f"SMU BIOS IF: {bios_ver}")
             if smu_ver:
@@ -633,3 +680,7 @@ def main() -> None:
         except KeyboardInterrupt:
             if not flags.json_out:
                 print("\nZenMaster: stopped.")
+
+
+if __name__ == "__main__":
+    main()

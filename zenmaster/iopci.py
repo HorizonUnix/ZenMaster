@@ -1,7 +1,7 @@
 from __future__ import annotations
 import ctypes
 
-from zenmaster import iokitcore
+from zenmaster import iokit
 
 _SERVICE = b"IOPCIBridge"
 
@@ -26,21 +26,21 @@ _connect: int | None = None
 
 
 def is_available() -> bool:
-    return iokitcore.service_available(_SERVICE)
+    return iokit.service_available(_SERVICE)
 
 
 def open() -> bool:
     global _connect
     if _connect is not None:
         return True
-    _connect = iokitcore.open_service(_SERVICE, _kIOPCIDiagnosticsClientType)
+    _connect = iokit.open_service(_SERVICE, _kIOPCIDiagnosticsClientType)
     return _connect is not None
 
 
 def close() -> None:
     global _connect
     if _connect is not None:
-        iokitcore.close_service(_connect)
+        iokit.close_service(_connect)
         _connect = None
 
 
@@ -57,7 +57,7 @@ def read_config(reg: int, width: int = 4) -> int:
     param.bitWidth  = width * 8
     param.address   = _pci_address(reg)
     param.value     = 0xFFFFFFFFFFFFFFFF
-    if not iokitcore.call_struct_method(_connect, _kMethodRead, param, param):
+    if not iokit.call_struct_method(_connect, _kMethodRead, param, param):
         return 0
     mask = (1 << (width * 8)) - 1
     return param.value & mask
@@ -73,4 +73,4 @@ def write_config(reg: int, width: int, value: int) -> bool:
     param.bitWidth  = width * 8
     param.address   = _pci_address(reg)
     param.value     = value & mask
-    return iokitcore.call_struct_method(_connect, _kMethodWrite, param, None)
+    return iokit.call_struct_method(_connect, _kMethodWrite, param, None)
