@@ -11,7 +11,10 @@ from typing import Any
 
 from zenmaster.errors import BackendUnavailable, SMUNotInitialized
 from zenmaster.pmtable import PM_TABLE_CMDS, TABLE_SIZES, DEFAULT_TABLE_SIZE
-from zenmaster.mailbox import MP1, MP1_DEFAULT, RSMU, RSMU_DEFAULT, HSMP, HSMP_DEFAULT, NARGS
+from zenmaster.mailbox import (
+    MP1, MP1_DEFAULT, RSMU, RSMU_DEFAULT, HSMP, HSMP_DEFAULT, NARGS,
+    transfer_with_retry,
+)
 from zenmaster.smu import SMU_OK, SMU_FAILED, SMU_REJECTED_PREREQ, ModuleStatus
 
 DRIVER_NAME  = "ryzen_smu"
@@ -27,7 +30,7 @@ _PCI_MUTEX_FALLBACK: str = "/tmp/access_pci.lock"
 _PCI_MUTEX_TIMEOUT_MS: int = 5000
 
 
-def acquire_pci_mutex(timeout_ms: int = _PCI_MUTEX_TIMEOUT_MS) -> int | None:
+def acquire_pci_mutex(timeout_ms: int = _PCI_MUTEX_TIMEOUT_MS) -> Any:
     path = PCI_MUTEX_NAME
     fd = None
     try:
@@ -91,6 +94,7 @@ _DEADLINE = 1.0
 _lock     = threading.Lock()
 _backend: str | None = None
 _fd: int | None = None
+_cached_pm_ver: int | None = None
 
 
 def version_str(v: tuple[int, ...]) -> str:
@@ -378,6 +382,8 @@ def smu_command(msg_id: int, arg: int = 0) -> int:
 
 
 def pm_table_supported(family: str = "") -> bool:
+    if _cached_pm_ver:
+        return True
     if os.path.exists(DRIVER_PATH + "/pm_table"):
         return True
     return family in PM_TABLE_CMDS
@@ -406,6 +412,7 @@ def _read_devmem(phys: int, size: int) -> bytes | None:
 
 
 def _read_pm_table_pci(family: str) -> tuple[bytes, int] | None:
+    global _cached_pm_ver
     cmds = PM_TABLE_CMDS.get(family)
     if cmds is None:
         return None
@@ -414,7 +421,8 @@ def _read_pm_table_pci(family: str) -> tuple[bytes, int] | None:
     status, out = query_rsmu(family, ver_op, 0)
     if status != SMU_OK or not out[0]:
         return None
-    ver = out[0]
+    ver = out[0] & 0xFFFFFFFF
+    _cached_pm_ver = ver
     size = TABLE_SIZES.get(ver, DEFAULT_TABLE_SIZE)
 
     status, out = query_rsmu(family, addr_op, extra)
@@ -424,15 +432,23 @@ def _read_pm_table_pci(family: str) -> tuple[bytes, int] | None:
     if not phys:
         return None
 
-    status, _ = query_rsmu(family, transfer_op, extra)
-    if status == SMU_REJECTED_PREREQ:
-        time.sleep(0.01)
-        status, _ = query_rsmu(family, transfer_op, extra)
+    status = transfer_with_retry(lambda: query_rsmu(family, transfer_op, extra)[0], (0.1, 0.5))
     if status != SMU_OK:
         return None
 
     data = _read_devmem(phys, size)
     return (data, ver) if data is not None else None
+
+
+def get_smu_version(family: str = "") -> int:
+    if _backend == "ryzen_smu":
+        try:
+            with open(DRIVER_PATH + "/version", "r") as f:
+                return int(f.read().strip(), 16) & 0xFFFFFFFF
+        except (OSError, ValueError):
+            pass
+    status, out = query_mp1(family, 0x02, 1)
+    return (out[0] & 0xFFFFFFFF) if status == SMU_OK and out[0] else 0
 
 
 def read_pm_table_full(family: str = "") -> tuple[bytes, int] | None:
@@ -445,16 +461,45 @@ def read_pm_table_full(family: str = "") -> tuple[bytes, int] | None:
 
 
 def read_pm_table_version(family: str = "") -> int:
+    global _cached_pm_ver
+    if _cached_pm_ver:
+        return _cached_pm_ver
+
     if _backend == "pci":
+        if family in PM_TABLE_CMDS:
+            ver_op = PM_TABLE_CMDS[family][0]
+            status, out = query_rsmu(family, ver_op, 0)
+            if status == SMU_OK and out[0]:
+                _cached_pm_ver = out[0] & 0xFFFFFFFF
+                return _cached_pm_ver
         r = _read_pm_table_pci(family)
-        return r[1] if r else 0
+        if r:
+            _cached_pm_ver = r[1] & 0xFFFFFFFF
+            return _cached_pm_ver
+        return 0
+
     try:
         with open(DRIVER_PATH + "/pm_table_version", "rb") as f:
             raw = f.read(4)
-        return struct.unpack("<I", raw)[0] if len(raw) >= 4 else 0
+        ver = struct.unpack("<I", raw)[0] & 0xFFFFFFFF if len(raw) >= 4 else 0
+        if ver:
+            _cached_pm_ver = ver
+            return _cached_pm_ver
     except OSError:
-        r = _read_pm_table_pci(family)
-        return r[1] if r else 0
+        pass
+
+    if family in PM_TABLE_CMDS:
+        ver_op = PM_TABLE_CMDS[family][0]
+        status, out = query_rsmu(family, ver_op, 0)
+        if status == SMU_OK and out[0]:
+            _cached_pm_ver = out[0] & 0xFFFFFFFF
+            return _cached_pm_ver
+
+    r = _read_pm_table_pci(family)
+    if r:
+        _cached_pm_ver = r[1] & 0xFFFFFFFF
+        return _cached_pm_ver
+    return 0
 
 
 def read_pm_table(family: str = "") -> bytes | None:
@@ -477,7 +522,7 @@ def read_pm_table(family: str = "") -> bytes | None:
 
 
 def close() -> None:
-    global _backend, _fd
+    global _backend, _fd, _cached_pm_ver
     if _fd is not None:
         try:
             os.close(_fd)
@@ -485,3 +530,4 @@ def close() -> None:
             pass
         _fd = None
     _backend = None
+    _cached_pm_ver = None

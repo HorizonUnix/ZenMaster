@@ -83,7 +83,7 @@ def mailbox_query(smn_write, smn_read, msg: int, rsp: int, args_base: int, op: i
     return SMU_FAILED, [0] * NARGS
 
 
-def transfer_with_retry(send_once, delays: tuple[float, ...] = (0.01, 0.1)) -> int:
+def transfer_with_retry(send_once, delays: tuple[float, ...] = (0.1, 0.5)) -> int:
     status = send_once()
     for delay in delays:
         if status != SMU_REJECTED_PREREQ:

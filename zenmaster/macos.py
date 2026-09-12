@@ -1,5 +1,10 @@
 from __future__ import annotations
+from contextlib import contextmanager
+import fcntl
+import os
 import threading
+import time
+from typing import Any
 
 from zenmaster import directhw, iopci
 from zenmaster.hardware import _sysctl_str
@@ -12,6 +17,8 @@ from zenmaster.mailbox import (
 from zenmaster.smu import SMU_OK, ModuleStatus
 
 DRIVER_NAME = "DirectHW"
+PCI_MUTEX_NAME: str = "/tmp/access_pci.lock"
+_PCI_MUTEX_TIMEOUT_MS: int = 5000
 
 NB_ADDR  = 0xB8
 NB_DATA  = 0xBC
@@ -24,10 +31,63 @@ _POLL_SLEEP = 0.0005
 _lock       = threading.Lock()
 _backend: str | None = None
 _force: str | None = None
+_cached_pm_ver: int | None = None
 
 _KEXT_URL = "https://github.com/joevt/directhw"
 
 _IOPCI_DEBUG_MSG = "The IOPCIBridge path requires the debug=0x144 boot-arg."
+
+
+def acquire_pci_mutex(timeout_ms: int = _PCI_MUTEX_TIMEOUT_MS) -> Any:
+    path = PCI_MUTEX_NAME
+    try:
+        fd = os.open(path, os.O_CREAT | os.O_RDWR, 0o666)
+    except OSError:
+        return None
+    deadline = time.monotonic() + (timeout_ms / 1000.0)
+    while True:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return fd
+        except (BlockingIOError, OSError):
+            if time.monotonic() >= deadline:
+                try:
+                    os.close(fd)
+                except OSError:
+                    pass
+                return None
+            time.sleep(0.005)
+
+
+def release_pci_mutex(handle: Any) -> bool:
+    if handle is None:
+        return False
+    try:
+        fcntl.flock(handle, fcntl.LOCK_UN)
+        return True
+    except OSError:
+        return False
+
+
+def close_pci_mutex(handle: Any) -> bool:
+    if handle is None:
+        return False
+    try:
+        os.close(handle)
+        return True
+    except OSError:
+        return False
+
+
+@contextmanager
+def pci_mutex_guard(timeout_ms: int = _PCI_MUTEX_TIMEOUT_MS) -> Any:
+    h = acquire_pci_mutex(timeout_ms)
+    try:
+        yield h
+    finally:
+        if h is not None:
+            release_pci_mutex(h)
+            close_pci_mutex(h)
 
 
 def force_iopci() -> None:
@@ -157,14 +217,16 @@ def _send(table: dict, default: tuple, family: str, op: int, arg0: int) -> int:
     _require_init()
     msg, rsp, args = table.get(family, default)
     with _lock:
-        return _mailbox_send(msg, rsp, args, op, arg0)
+        with pci_mutex_guard():
+            return _mailbox_send(msg, rsp, args, op, arg0)
 
 
 def _query(table: dict, default: tuple, family: str, op: int, arg0: int) -> tuple[int, list[int]]:
     _require_init()
     msg, rsp, args = table.get(family, default)
     with _lock:
-        return _mailbox_query(msg, rsp, args, op, arg0)
+        with pci_mutex_guard():
+            return _mailbox_query(msg, rsp, args, op, arg0)
 
 
 def send_mp1(family: str, op: int, arg0: int = 0) -> int:
@@ -194,49 +256,64 @@ def query_hsmp(family: str, op: int, arg0: int = 0) -> tuple[int, list[int]]:
 def read_smn(addr: int) -> int:
     _require_init()
     with _lock:
-        return _smn_read(addr)
+        with pci_mutex_guard():
+            return _smn_read(addr)
 
 
 def write_smn(addr: int, value: int) -> None:
     _require_init()
     with _lock:
-        _smn_write(addr, value)
+        with pci_mutex_guard():
+            _smn_write(addr, value)
 
 
 def smu_command(msg_id: int, arg: int = 0) -> int:
     _require_init()
     msg, rsp, args = MP1_DEFAULT
     with _lock:
-        return _mailbox_send(msg, rsp, args, msg_id, arg)
+        with pci_mutex_guard():
+            return _mailbox_send(msg, rsp, args, msg_id, arg)
+
+
+def get_smu_version(family: str = "") -> int:
+    status, out = query_mp1(family, 0x02, 1)
+    return (out[0] & 0xFFFFFFFF) if status == SMU_OK and out[0] else 0
 
 
 def pm_table_supported(family: str = "") -> bool:
+    if _cached_pm_ver:
+        return True
     return _backend != "iopci" and family in PM_TABLE_CMDS
 
 
 def _transfer_with_retry(msg: int, rsp: int, args_base: int, op: int, arg0: int = 0,
-                         delays: tuple[float, ...] = (0.01, 0.1)) -> int:
+                         delays: tuple[float, ...] = (0.1, 0.5)) -> int:
     def once() -> int:
         with _lock:
-            return _mailbox_send(msg, rsp, args_base, op, arg0)
+            with pci_mutex_guard():
+                return _mailbox_send(msg, rsp, args_base, op, arg0)
     return transfer_with_retry(once, delays)
 
 
 def read_pm_table_full(family: str = "") -> tuple[bytes, int] | None:
+    global _cached_pm_ver
     if _backend in (None, "iopci") or family not in PM_TABLE_CMDS:
         return None
     ver_op, addr_op, transfer_op, addr_64bit, extra = PM_TABLE_CMDS[family]
     msg, rsp, args_base = RSMU.get(family, RSMU_DEFAULT)
 
     with _lock:
-        status, out = _mailbox_query(msg, rsp, args_base, ver_op)
+        with pci_mutex_guard():
+            status, out = _mailbox_query(msg, rsp, args_base, ver_op)
     if status != SMU_OK or not out[0]:
         return None
-    ver = out[0]
+    ver = out[0] & 0xFFFFFFFF
+    _cached_pm_ver = ver
     size = TABLE_SIZES.get(ver, DEFAULT_TABLE_SIZE)
 
     with _lock:
-        status, out = _mailbox_query(msg, rsp, args_base, addr_op, extra)
+        with pci_mutex_guard():
+            status, out = _mailbox_query(msg, rsp, args_base, addr_op, extra)
     if status != SMU_OK:
         return None
     phys_addr = (out[1] << 32) | out[0] if addr_64bit else out[0]
@@ -251,8 +328,24 @@ def read_pm_table_full(family: str = "") -> tuple[bytes, int] | None:
 
 
 def read_pm_table_version(family: str = "") -> int:
+    global _cached_pm_ver
+    if _cached_pm_ver:
+        return _cached_pm_ver
+
+    if family in PM_TABLE_CMDS:
+        ver_op = PM_TABLE_CMDS[family][0]
+        msg, rsp, args_base = RSMU.get(family, RSMU_DEFAULT)
+        with _lock:
+            with pci_mutex_guard():
+                status, out = _mailbox_query(msg, rsp, args_base, ver_op)
+        if status == SMU_OK and out[0]:
+            _cached_pm_ver = out[0] & 0xFFFFFFFF
+            return _cached_pm_ver
     r = read_pm_table_full(family)
-    return r[1] if r else 0
+    if r:
+        _cached_pm_ver = r[1] & 0xFFFFFFFF
+        return _cached_pm_ver
+    return 0
 
 
 def read_pm_table(family: str = "") -> bytes | None:
@@ -261,7 +354,8 @@ def read_pm_table(family: str = "") -> bytes | None:
 
 
 def close() -> None:
-    global _backend
+    global _backend, _cached_pm_ver
     directhw.close()
     iopci.close()
     _backend = None
+    _cached_pm_ver = None

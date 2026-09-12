@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.2.1] - 2026-09-12
+
+### Fixed
+- Fixed PM table resolution and read failures on Windows under the PawnIO driver backend.
+
 ## [1.2.0] - 2026-09-12
 
 Most changes in this release originate from UXTU v26.3.x & [ryzen_smu](https://github.com/amkillam/ryzen_smu)

@@ -269,7 +269,9 @@ def _execute(fn_name: str, in_args: list[int], out_count: int) -> list[int]:
     return list(struct.unpack(f"<{count}q", out_buf.raw[: count * 8]))
 
 
-def _execute_cmd(fn_name: str, in_args: list[int] = []) -> bool:
+def _execute_cmd(fn_name: str, in_args: list[int] | None = None) -> bool:
+    if in_args is None:
+        in_args = []
     fn_bytes = fn_name.encode("ascii")[:31]
     name_buf = struct.pack("32s", fn_bytes)
     args_buf = struct.pack(f"<{len(in_args)}q", *in_args) if in_args else b""
@@ -309,21 +311,29 @@ def _mailbox_query(msg: int, rsp: int, args_base: int, op: int, arg0: int = 0) -
 
 def _resolve_pm_table() -> tuple[int, int] | None:
     _require_init()
-    with _lock:
-        with pci_mutex_guard():
-            out = _execute("ioctl_resolve_pm_table", [], 2)
-    if len(out) == 2 and out[0] != 0:
-        return out[0], out[1]
+    import time
+    for delay in (0.0, 0.1, 0.5):
+        if delay:
+            time.sleep(delay)
+        with _lock:
+            with pci_mutex_guard():
+                out = _execute("ioctl_resolve_pm_table", [], 2)
+        if len(out) == 2 and out[0] != 0:
+            return (out[0] & 0xFFFFFFFF), out[1]
     return None
 
 
 def _update_pm_table(family: str = "") -> bool:
     _require_init()
-    with _lock:
-        with pci_mutex_guard():
-            ok = _execute_cmd("ioctl_update_pm_table")
-    if ok:
-        return True
+    import time
+    for delay in (0.0, 0.1, 0.5):
+        if delay:
+            time.sleep(delay)
+        with _lock:
+            with pci_mutex_guard():
+                ok = _execute_cmd("ioctl_update_pm_table")
+        if ok:
+            return True
     if family in PM_TABLE_CMDS:
         _ver_op, _addr_op, transfer_op, _addr_64bit, extra = PM_TABLE_CMDS[family]
         msg, rsp, args_base = RSMU.get(family, RSMU_DEFAULT)
@@ -333,15 +343,19 @@ def _update_pm_table(family: str = "") -> bool:
 
 
 def _read_physical_memory(phys_addr: int, size: int) -> bytes | None:
-    n   = (size + 7) // 8
-    raw = _execute("ioctl_read_pm_table", [], n)
+    n = min((size + 7) // 8, 512)
+    with _lock:
+        raw = _execute("ioctl_read_pm_table", [], n)
     if raw:
-        return struct.pack(f"<{len(raw)}q", *raw)[:size]
+        data = struct.pack(f"<{len(raw)}q", *raw)[:size]
+        if len(data) < size:
+            data = data + b"\x00" * (size - len(data))
+        return data
     return None
 
 
 def _transfer_with_retry(msg: int, rsp: int, args_base: int, op: int, arg0: int = 0,
-                         delays: tuple[float, ...] = (0.01, 0.1)) -> int:
+                         delays: tuple[float, ...] = (0.1, 0.5)) -> int:
     def once() -> int:
         with _lock:
             with pci_mutex_guard():
@@ -417,21 +431,17 @@ def get_smu_version(family: str = "") -> int:
         with pci_mutex_guard():
             out = _execute("ioctl_get_smu_version", [], 1)
     if out and out[0]:
-        return out[0]
+        return out[0] & 0xFFFFFFFF
     msg, rsp, args = MP1.get(family, MP1_DEFAULT)
     with _lock:
         with pci_mutex_guard():
             status, res = _mailbox_query(msg, rsp, args, 0x02, 1)
-    return res[0] if status == SMU_OK and res[0] else 0
-
-
-def get_code_name() -> int:
-    _require_init()
-    out = _execute("ioctl_get_code_name", [], 1)
-    return out[0] if out else -1
+    return (res[0] & 0xFFFFFFFF) if status == SMU_OK and res[0] else 0
 
 
 def pm_table_supported(family: str = "") -> bool:
+    if _cached_pm_ver:
+        return True
     return family in PM_TABLE_CMDS
 
 
@@ -445,34 +455,34 @@ def read_pm_table_full(family: str = "") -> tuple[bytes, int] | None:
     if _cached_pm_ver is None:
         resolved = _resolve_pm_table()
         if resolved is not None:
-            _cached_pm_ver, _ = resolved
+            _cached_pm_ver = resolved[0] & 0xFFFFFFFF
             _cached_pm_size = TABLE_SIZES.get(_cached_pm_ver, DEFAULT_TABLE_SIZE)
         elif family in PM_TABLE_CMDS:
             ver = read_pm_table_version(family)
             if ver:
-                _cached_pm_ver = ver
-                _cached_pm_size = TABLE_SIZES.get(ver, DEFAULT_TABLE_SIZE)
+                _cached_pm_ver = ver & 0xFFFFFFFF
+                _cached_pm_size = TABLE_SIZES.get(_cached_pm_ver, DEFAULT_TABLE_SIZE)
 
     if _cached_pm_ver is None or not _cached_pm_ver:
         return None
 
-    ver = _cached_pm_ver
+    ver = _cached_pm_ver & 0xFFFFFFFF
     size = _cached_pm_size or DEFAULT_TABLE_SIZE
 
     _update_pm_table(family)
 
-    n = (size + 7) // 8
+    n = min((size + 7) // 8, 512)
     with _lock:
         raw = _execute("ioctl_read_pm_table", [], n)
 
     if not raw:
         resolved = _resolve_pm_table()
         if resolved is not None:
-            _cached_pm_ver, _ = resolved
+            _cached_pm_ver = resolved[0] & 0xFFFFFFFF
             _cached_pm_size = TABLE_SIZES.get(_cached_pm_ver, DEFAULT_TABLE_SIZE)
             ver = _cached_pm_ver
             size = _cached_pm_size or DEFAULT_TABLE_SIZE
-            n = (size + 7) // 8
+            n = min((size + 7) // 8, 512)
             _update_pm_table(family)
             with _lock:
                 raw = _execute("ioctl_read_pm_table", [], n)
@@ -481,6 +491,8 @@ def read_pm_table_full(family: str = "") -> tuple[bytes, int] | None:
         return None
 
     data = struct.pack(f"<{len(raw)}q", *raw)[:size]
+    if len(data) < size:
+        data = data + b"\x00" * (size - len(data))
     return (data, ver)
 
 
@@ -491,7 +503,7 @@ def read_pm_table_version(family: str = "") -> int:
     if _handle:
         resolved = _resolve_pm_table()
         if resolved and resolved[0]:
-            _cached_pm_ver = resolved[0]
+            _cached_pm_ver = resolved[0] & 0xFFFFFFFF
             return _cached_pm_ver
     if _handle and family in PM_TABLE_CMDS:
         ver_op = PM_TABLE_CMDS[family][0]
@@ -500,7 +512,8 @@ def read_pm_table_version(family: str = "") -> int:
             with pci_mutex_guard():
                 status, out = _mailbox_query(msg, rsp, args_base, ver_op)
         if status == SMU_OK and out[0]:
-            return out[0]
+            _cached_pm_ver = out[0] & 0xFFFFFFFF
+            return _cached_pm_ver
     return 0
 
 

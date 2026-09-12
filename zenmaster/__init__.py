@@ -26,7 +26,7 @@ from zenmaster.errors import (
 try:
     __version__ = version("zenmaster")
 except PackageNotFoundError:
-    __version__ = "1.2.0"
+    __version__ = "1.2.1"
 
 __all__ = [
     "CpuInfo", "detect", "resolve", "apply", "ApplyResult", "runner", "smu", "sensors", "table",

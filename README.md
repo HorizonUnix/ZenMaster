@@ -162,7 +162,7 @@ print(f"SMN 0x0005A380 = 0x{value:08X}")
 
 ## Technical Comparison: ZenMaster vs. RyzenAdj
 
-| Feature | RyzenAdj | ZenMaster v1.2.0 |
+| Feature | RyzenAdj | ZenMaster v1.2.1 |
 |---|---|---|
 | **Installation** | Compilation from source (`cmake`, `make`, `libpci-dev`) | `pip install zenmaster` (pure Python package) |
 | **Supported Families** | ~15 APU and desktop families | 44 families (Zen 1 to Zen 5/6, Desktop, Mobile, Threadripper, Server EPYC via HSMP) |
