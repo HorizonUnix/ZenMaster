@@ -7,7 +7,9 @@
 
 ## Overview
 
-ZenMaster adjusts power limits, temperatures, VRM currents, clocks, voltages, and Curve Optimizer offsets on AMD Ryzen CPUs and APUs, no BIOS access needed. Runs on Linux, Windows, and macOS (AMD Hackintosh). Same CLI as [RyzenAdj](https://github.com/FlyGoat/RyzenAdj), so your existing scripts and presets just work, except you `pip install` it instead of building it.
+ZenMaster configures power limits, thermal thresholds, VRM current limits, clocks, voltages, and Curve Optimizer offsets on AMD Zen processors via the System Management Unit (SMU). It operates across Linux, Windows, and macOS (AMD Hackintosh) without requiring BIOS configuration.
+
+ZenMaster uses the same CLI options and argument naming conventions as [RyzenAdj](https://github.com/FlyGoat/RyzenAdj), serving as a drop-in replacement that installs via `pip` with zero compilation steps.
 
 ```bash
 pip install zenmaster
@@ -15,127 +17,179 @@ sudo zenmaster --stapm-limit=15000 --fast-limit=20000 --tctl-temp=90
 ```
 
 > [!NOTE]
-> There is a GUI version of ZenMaster called [ZenTune](https://github.com/HorizonUnix/ZenTune) that supports macOS and Linux.
+> A graphical frontend for ZenMaster is available in [ZenTune](https://github.com/HorizonUnix/ZenTune) for Linux and macOS.
 
-What you get over RyzenAdj itself:
+### Key Capabilities
 
-- No cmake, no libpci, no build step. `pip install` and you're done.
-- Same `--name=value` args, so nothing you already have breaks.
-- PawnIO on Windows, not WinRing0. WinRing0 has known CVEs, PawnIO doesn't.
-- `--help` only lists what your CPU actually supports.
-- `--table` for a labeled sensor readout, `--sensors` for a compact live view, `--json` when you need to parse it.
-- `--reapply=N` if you want the settings to stick against other software fighting you.
-- `import zenmaster` works as a library on all three platforms.
-- Zero mandatory third-party dependencies, anywhere.
+- **Broad CPU Coverage**: Supports 44 AMD Zen CPU families spanning Zen 1 through Zen 5/6, including mobile APUs, desktop processors, Threadripper workstations, server EPYC platforms (via HSMP), and Hygon Dhyana.
+- **Pure Python Delivery**: Pure Python 3.10+ package with no C compiler, cmake, or libpci dependencies.
+- **Safe Windows Driver**: Uses Microsoft-signed [PawnIO](https://github.com/namazso/PawnIO) instead of WinRing0. PawnIO enforces restricted IOCTL dispatch and lacks arbitrary physical-memory mapping primitives.
+- **Cross-Process Synchronization**: Uses named system mutexes (`/run/lock/access_pci.lock` on Linux, `Global\Access_PCI` on Windows) to serialize SMN bus access across concurrent processes and daemons.
+- **Hardware-Filtered CLI**: `zenmaster --help` dynamically queries CPUID and displays only the arguments implemented for the detected CPU family.
+- **Curve Optimizer Engine**: `--set-coper` supports individual core, CCD, and CCX targeting (`core:val`, `ccd:core:val`, `ccd:ccx:core:val`) with 20-bit two's complement sign-magnitude encoding.
+- **Telemetry and Monitoring**: Parses SMU Power Management (PM) tables across 28 hardware table structures. Supports formatted table output (`--table`), live curses per-core monitoring (`--sensors`), raw binary extraction (`--dump-table`), and machine-readable JSON (`--json`).
+- **Persistence Support**: `--reapply=N` runs an integrated background reapply loop to preserve parameters against OEM thermal daemon overrides.
+- **Embeddable Library**: `import zenmaster` exports typed primitives (`detect`, `apply`, `smu`, `read_smn`, `write_smn`, `get_ccd_count`) under `py.typed`.
 
-**Full documentation is in the [Wiki](https://github.com/HorizonUnix/ZenMaster/wiki)**, this README is just the overview. See below for what's there.
+Detailed technical documentation is available in the [ZenMaster Wiki](https://github.com/HorizonUnix/ZenMaster/wiki).
 
 ---
 
 ## Documentation
 
-| Page | What's in it |
+| Page | Description |
 |---|---|
-| [Installation](https://github.com/HorizonUnix/ZenMaster/wiki/Installation) | Linux, Windows, and macOS setup: `ryzen_smu`, PawnIO, DirectHW |
-| [CLI Usage](https://github.com/HorizonUnix/ZenMaster/wiki/CLI-Usage) | Every option, examples, JSON output |
-| [Tuning Arguments](https://github.com/HorizonUnix/ZenMaster/wiki/Tuning-Arguments) | Full argument reference with units |
-| [PM Table and Monitoring](https://github.com/HorizonUnix/ZenMaster/wiki/PM-Table-and-Monitoring) | `--table` / `--sensors` / `--dump-table` |
-| [Library API](https://github.com/HorizonUnix/ZenMaster/wiki/Library-API) | Embedding ZenMaster in Python |
-| [How ZenMaster Talks to the SMU](https://github.com/HorizonUnix/ZenMaster/wiki/How-ZenMaster-Talks-to-the-SMU) | The mailbox protocol, and how each OS reaches it |
-| [Architecture](https://github.com/HorizonUnix/ZenMaster/wiki/Architecture) | Package layout, internals, opcode tables |
-| [Troubleshooting](https://github.com/HorizonUnix/ZenMaster/wiki/Troubleshooting) | Fixes for the common problems |
-| [FAQ](https://github.com/HorizonUnix/ZenMaster/wiki/FAQ) | Short answers |
+| [Installation](https://github.com/HorizonUnix/ZenMaster/wiki/Installation) | Setup instructions for Linux (`ryzen_smu` / direct PCI), Windows (PawnIO), and macOS (DirectHW / IOPCIBridge) |
+| [CLI Usage](https://github.com/HorizonUnix/ZenMaster/wiki/CLI-Usage) | Command-line reference, query flags, JSON output, and reapply loops |
+| [Tuning Arguments](https://github.com/HorizonUnix/ZenMaster/wiki/Tuning-Arguments) | Complete SMU argument index, units, opcode mappings, and Curve Optimizer syntax |
+| [PM Table and Monitoring](https://github.com/HorizonUnix/ZenMaster/wiki/PM-Table-and-Monitoring) | Real-time monitoring (`--sensors`), PM table decoding (`--table`), and binary dumps |
+| [Library API](https://github.com/HorizonUnix/ZenMaster/wiki/Library-API) | Python integration, low-level SMN operations, and typed exception hierarchies |
+| [How ZenMaster Talks to the SMU](https://github.com/HorizonUnix/ZenMaster/wiki/How-ZenMaster-Talks-to-the-SMU) | SMU mailbox protocols (MP1, RSMU, HSMP), PCI config space, and OS driver layers |
+| [Architecture](https://github.com/HorizonUnix/ZenMaster/wiki/Architecture) | Subsystem design, family dispatching, opcode tables, and lock mechanisms |
+| [Troubleshooting](https://github.com/HorizonUnix/ZenMaster/wiki/Troubleshooting) | Root causes and solutions for permission errors, driver conflicts, and rejected opcodes |
+| [FAQ](https://github.com/HorizonUnix/ZenMaster/wiki/FAQ) | Common questions on safety, persistence, hardware support, and limitations |
 
 ---
 
 ## Compatibility
 
-| Platform | Privileges | Driver |
-|----------|--------|--------|
-| Linux, Python 3.10+ | root | `ryzen_smu` module, or PCI direct access |
-| Windows, Python 3.10+ | Administrator | [PawnIO](https://github.com/namazso/PawnIO.Setup) |
-| macOS (AMD Hackintosh), Python 3.10+ | root | [DirectHW.kext](https://github.com/joevt/directhw), or the kext-free IOPCIBridge path (tuning only) |
-| Intel | n/a | Not supported |
+| Platform | Privileges | Driver Requirements | Access Mechanism |
+|----------|------------|---------------------|------------------|
+| Linux, Python 3.10+ | root | None (direct PCI), or `ryzen_smu` (>= 0.1.7) | Direct PCI config via `/dev/mem` / `/dev/port`, or `/sys/kernel/ryzen_smu/` sysfs |
+| Windows, Python 3.10+ | Administrator | [PawnIO](https://github.com/namazso/PawnIO.Setup) | `\\.\PawnIO` driver handle (`IOCTL_READ_PCI_CONFIG`, `IOCTL_WRITE_PCI_CONFIG`) |
+| macOS (AMD Hackintosh), Python 3.10+ | root | [DirectHW.kext](https://github.com/joevt/directhw), or kext-free | `DirectHW` user-client, or `IOPCIBridge` Mach service (`--iopci`, tuning only) |
+| Intel | n/a | Not supported | None |
 
 > [!NOTE]
-> On Linux, PCI direct access works on most systems without any kernel module. **`ryzen_smu` is only required when Secure Boot is enabled**, since kernel lockdown blocks raw PCI access. Install [ryzen_smu](https://github.com/amkillam/ryzen_smu) ≥ 0.1.7 and enroll the signing key in that case. Full detail on why: the [How ZenMaster Talks to the SMU](https://github.com/HorizonUnix/ZenMaster/wiki/How-ZenMaster-Talks-to-the-SMU) wiki page.
+> On Linux, direct PCI config space access works without external kernel modules on standard configurations. If kernel lockdown is active (such as under UEFI Secure Boot), the Linux kernel blocks raw PCI access from userspace; installing the signed [ryzen_smu](https://github.com/amkillam/ryzen_smu) driver provides the required sysfs communication path.
 
 > [!WARNING]
-> This tool writes directly to the CPU's System Management Unit. Wrong values can cause instability, throttling, or a hard lock. Use at your own risk.
+> ZenMaster communicates directly with the processor System Management Unit. Specifying voltages, currents, or power limits outside the operating parameters of your cooling subsystem or silicon can trigger thermal throttling, system resets, or hardware instability.
 
 ---
 
-## Quick start
+## Quick Start
 
-**Linux:**
+### Linux
+
 ```bash
 pip install zenmaster
-sudo zenmaster --stapm-limit=15000 --fast-limit=20000 --tctl-temp=90
+
+# Display detected processor family, CCD count, mailbox type, and supported tuning count
+sudo zenmaster --info
+
+# Apply power limits and thermal limits
+sudo zenmaster --stapm-limit=15000 --fast-limit=20000 --slow-limit=18000 --tctl-temp=90
+
+# Monitor live per-core clocks and power table telemetry
+sudo zenmaster --sensors
 ```
 
-**Windows** (install [PawnIO](https://github.com/namazso/PawnIO.Setup/releases/latest/download/PawnIO_setup.exe) first, reboot, then open an Administrator terminal):
+### Windows
+
+Install [PawnIO](https://github.com/namazso/PawnIO.Setup/releases/latest/download/PawnIO_setup.exe), restart the system, and execute commands from an Administrator terminal:
+
 ```bat
 pip install zenmaster
-zenmaster --stapm-limit=15000 --fast-limit=20000 --tctl-temp=90
+
+zenmaster --info
+zenmaster --stapm-limit=15000 --fast-limit=20000 --slow-limit=18000 --tctl-temp=90
+zenmaster --table
 ```
 
-**macOS** (AMD Hackintosh, needs DirectHW.kext or the `--iopci` fallback, see the wiki):
+### macOS (AMD Hackintosh)
+
+Requires `DirectHW.kext` for full features, or `--iopci` for kext-free tuning:
+
 ```bash
 pip3 install zenmaster
-sudo python3 -m zenmaster --stapm-limit=15000 --fast-limit=20000 --tctl-temp=90
-```
 
-Check what your CPU supports with `zenmaster --help`; it only lists arguments your family actually has. Full walkthrough for each OS, including driver setup: the [Installation](https://github.com/HorizonUnix/ZenMaster/wiki/Installation) wiki page.
+sudo zenmaster --info
+sudo zenmaster --stapm-limit=15000 --fast-limit=20000 --slow-limit=18000 --tctl-temp=90
+
+# Kext-free tuning mode via IOPCIBridge
+sudo zenmaster --iopci --stapm-limit=15000 --fast-limit=20000
+```
 
 ---
 
-## Library usage
+## Library Usage
 
-Meant to be embedded, not just run standalone.
+ZenMaster is structured as an importable Python library with typed interfaces (`py.typed`).
 
 ```python
 import zenmaster
-from zenmaster import detect, apply, smu
+from zenmaster import detect, apply, smu, read_smn, write_smn, get_ccd_count
+from zenmaster.exceptions import ZenMasterError, BackendUnavailable, SMUNotInitialized
 
+# Detect CPU family, CPUID, CCD topology, and SMU mailbox protocol
 info = detect()
-smu.init()
+print(f"Family: {info.family.name}")
+print(f"Mailbox: {info.family.mailbox_type}")
+print(f"Physical CCDs: {get_ccd_count()}")
+print(f"Available tuning args: {len(info.family.args)}")
 
-results, rejected = apply("--stapm-limit=15000 --tctl-temp=90", info.family)
+# Initialize the platform hardware driver
+try:
+    smu.init()
+except BackendUnavailable as exc:
+    print(f"Initialization failed: {exc}")
+    raise SystemExit(1)
+
+# Apply SMU settings
+results, rejected = apply("--stapm-limit=15000 --fast-limit=20000 --tctl-temp=90", info.family)
+
 for r in results:
-    print(r["arg"], smu.status_name(r["status"]))
+    status_str = smu.status_name(r["status"])
+    print(f"{r['arg']}: {status_str} (0x{r['status']:02X})")
+
+if rejected:
+    print(f"Rejected unsupported arguments: {rejected}")
+
+# Low-level direct SMN access (synchronized via named PCI lock)
+value = read_smn(0x0005A380)
+print(f"SMN 0x0005A380 = 0x{value:08X}")
 ```
 
-`py.typed` ships in the package, so your type checker sees real signatures. `smu.init()` raises `BackendUnavailable` on failure; any SMU call before `init()` raises `SMUNotInitialized`; both subclass `ZenMasterError` (itself a `RuntimeError`). Full API reference, including reading sensors, low-level mailbox access, and two runnable examples ported from RyzenAdj: the [Library API](https://github.com/HorizonUnix/ZenMaster/wiki/Library-API) wiki page.
+### Library Architecture Highlights
+
+- **Typed Exceptions**: Root exception `ZenMasterError` (subclass of `RuntimeError`) with derived types `BackendUnavailable`, `SMUNotInitialized`, `UnsupportedCPU`, `SMUTimeoutError`, and `PMTableError`.
+- **Direct SMN Operations**: `read_smn(address)` and `write_smn(address, value)` expose serialized access to the System Management Network bus.
+- **Hardware Introspection**: `detect()` returns a `CpuInfo` object containing CPUID model, stepping, package socket, and the detected `CpuFamily`.
+- **Top-Level Exports**: 53 functions and classes exported from `zenmaster`, with specialized submodules available in `zenmaster.sensors` (alias `zenmaster.table`) and `zenmaster.iopci` (aliases `zenmaster.iokit`, `zenmaster.iokitcore`).
 
 ---
 
-## How it compares to RyzenAdj
+## Technical Comparison: ZenMaster vs. RyzenAdj
 
-Same argument names, same SMU opcode semantics. Drop-in for most use cases, minus the build step and WinRing0.
-
-| | RyzenAdj | ZenMaster |
+| Feature | RyzenAdj | ZenMaster v1.2.0 |
 |---|---|---|
-| Install | Build from source (cmake, pkg-config, libpci) | `pip install zenmaster` |
-| Language | C | Pure Python 3.10+ |
-| Windows driver | WinRing0 ⚠️ | PawnIO ✅ |
-| `--help` | Static, lists every argument | Dynamic, only your CPU's arguments |
-| Output | Plain text | Plain text or `--json` |
-| PM table | Raw float dump | Labeled fields with units (`--table`), or a compact live view (`--sensors`) |
-| Use as a library | Link the C `libryzenadj` / shell out | `import zenmaster` |
-| Build dependencies | cmake, make, libpci | None |
-| Platforms | Windows and Linux | Linux, Windows, and macOS (Hackintosh) |
-
-### On WinRing0
-
-RyzenAdj's Windows backend is WinRing0 (`OlsApi` / OpenLibSys). It has actual CVEs ([CVE-2020-14979](https://nvd.nist.gov/vuln/detail/CVE-2020-14979), [CVE-2021-41285](https://nvd.nist.gov/vuln/detail/CVE-2021-41285)) and hands any unprivileged process full read/write to physical memory, PCI config space, I/O ports. A few AV vendors just flag it outright.
-
-ZenMaster uses [PawnIO](https://github.com/namazso/PawnIO) instead: Microsoft-signed, narrow IOCTL interface, no raw physical-memory access, no CVEs on record.
+| **Installation** | Compilation from source (`cmake`, `make`, `libpci-dev`) | `pip install zenmaster` (pure Python package) |
+| **Supported Families** | ~15 APU and desktop families | 44 families (Zen 1 to Zen 5/6, Desktop, Mobile, Threadripper, Server EPYC via HSMP) |
+| **Windows Driver** | WinRing0 (`OlsApi.dll`) ⚠️ | PawnIO (`PawnIO.sys`) ✅ |
+| **Windows Driver Security** | Known vulnerabilities ([CVE-2020-14979](https://nvd.nist.gov/vuln/detail/CVE-2020-14979), [CVE-2021-41285](https://nvd.nist.gov/vuln/detail/CVE-2021-41285)); unprivileged physical memory read/write | Microsoft-signed, IOCTL boundary validation, zero arbitrary physical memory access |
+| **Process Synchronization** | None; uncoordinated concurrent PCI config space access | Named cross-process mutex (`/run/lock/access_pci.lock` on Linux, `Global\Access_PCI` on Windows) |
+| **CLI `--help`** | Static output listing all arguments across all generations | Dynamic; queries CPUID and displays only arguments implemented for detected CPU |
+| **Curve Optimizer** | Basic per-core integer pass-through | Multi-token per-core/CCD targeting (`--set-coper=core:val`, `ccd:core:val`, `ccd:ccx:core:val`) with 20-bit encoding |
+| **Server Support** | None | AMD EPYC 7002/7003/9004/9005 series via Host System Management Port (HSMP, `0x3B10A8C`) |
+| **PM Table Telemetry** | Unlabeled floating-point array dump | Labeled field decoder (`--table`), curses live monitor (`--sensors`), and binary export (`--dump-table`) across 28 structs |
+| **macOS Support** | Partial (DirectHW only) | Full DirectHW support plus kext-free `IOPCIBridge` user-client fallback (`--iopci`) |
+| **Library Embedding** | Link C shared library or fork subprocess | `import zenmaster` with full type annotations (`py.typed`) |
 
 ---
 
-## Supported CPUs
+## Supported Processor Families
 
-First-gen Ryzen (Summit Ridge / Zen 1) through Ryzen 9000 and Strix Halo, APU and desktop. Run `zenmaster --info` to confirm detection and socket mapping. PM table support (`--table`/`--sensors`) is a narrower list, mostly APUs and mobile parts, see the [Tuning Arguments](https://github.com/HorizonUnix/ZenMaster/wiki/Tuning-Arguments) and [PM Table and Monitoring](https://github.com/HorizonUnix/ZenMaster/wiki/PM-Table-and-Monitoring) wiki pages.
+ZenMaster supports 44 AMD Zen CPU architectures spanning client, mobile, workstation, and enterprise platforms:
+
+- **Zen 1 / Zen+**: Summit Ridge, Pinnacle Ridge, Raven Ridge, Picasso
+- **Zen 2**: Matisse, Castle Peak (Threadripper), Rome (EPYC), Renoir, Lucienne, Van Gogh (Steam Deck), Mendocino
+- **Zen 3 / Zen 3+**: Vermeer, Chagall (Threadripper), Milan (EPYC), Cezanne, Barcelo, Rembrandt, Rembrandt+, Dragon Crest
+- **Zen 4 / Zen 4c**: Raphael, Genoa / Bergamo (EPYC), Storm Peak (Threadripper), Phoenix, Phoenix 2, Hawk Point, Dragon Range
+- **Zen 5 / Zen 5c / Zen 6**: Granite Ridge, Turin (EPYC), Strix Point, Strix Halo, Fire Range, Krackan Point, Medusa, Olympic Ridge
+- **Hygon Dhyana**: Chinese x86 Zen 1 derivative architecture
+
+Run `zenmaster --info` to determine the detected family, mailbox architecture, CCD configuration, and PM table version of your system.
 
 ---
 
@@ -145,18 +199,24 @@ First-gen Ryzen (Summit Ridge / Zen 1) through Ryzen 9000 and Strix Halo, APU an
 pip install -U zenmaster
 ```
 
-`zenmaster --version` checks PyPI for a newer release without updating; `zenmaster.check_update()` does the same from code.
+To check PyPI for a newer release without upgrading:
+
+```bash
+zenmaster --version
+```
+
+Programmatic version checks can be executed via `zenmaster.check_update()`.
 
 ---
 
 ## Acknowledgments
 
 | Project | Contribution |
-|---------|-------------|
-| [RyzenAdj](https://github.com/FlyGoat/RyzenAdj) | Inspiration for the tool as a whole, and canonical argument names |
-| [Universal x86 Tuning Utility](https://github.com/JamesCJ60/Universal-x86-Tuning-Utility) | SMU opcode tables, Windows PawnIO path, and CPU detection approach |
-| [UXTU4Linux](https://github.com/HorizonUnix/UXTU4Linux) | Core reference implementation: Linux backend logic and hardware detection |
-| [ryzen_smu](https://github.com/amkillam/ryzen_smu) | Linux kernel module for SMU access |
-| [PawnIO](https://github.com/namazso/PawnIO) | Modern signed Windows kernel driver |
-| [DirectHW](https://github.com/joevt/directhw) | macOS kext for PCI config and physical memory access (joevt) |
-| [pciutils](https://github.com/joevt/pciutils) | The `darwin2` IOPCIBridge method behind the kext-free `--iopci` path (joevt) |
+|---|---|
+| [RyzenAdj](https://github.com/FlyGoat/RyzenAdj) | Originating project for AMD SMU parameter naming and opcode semantics |
+| [Universal x86 Tuning Utility](https://github.com/JamesCJ60/Universal-x86-Tuning-Utility) | SMU opcode references, PawnIO driver integration architecture, and family detection patterns |
+| [ZenTune](https://github.com/HorizonUnix/ZenTune) | Reference Linux backend implementation, hardware detection matrices, and sysfs interfaces |
+| [ryzen_smu](https://github.com/amkillam/ryzen_smu) | Linux kernel driver module for out-of-tree SMU mailbox communication |
+| [PawnIO](https://github.com/namazso/PawnIO) | Modern Microsoft-signed Windows kernel driver interface |
+| [DirectHW](https://github.com/joevt/directhw) | macOS kernel extension for physical memory and PCI config space operations (joevt) |
+| [pciutils](https://github.com/joevt/pciutils) | Implementation of the `darwin2` IOPCIBridge user-client method enabling kext-free macOS access (joevt) |
