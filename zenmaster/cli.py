@@ -317,7 +317,6 @@ def _show_info(info: CpuInfo, backend: str | None, json_out: bool) -> None:
                 pm_size = TABLE_SIZES.get(pm_ver, DEFAULT_TABLE_SIZE)
         except Exception:
             pass
-    sec_boot = smu.secure_boot_enabled()
     tuning_args = runner.get_supported_args(info.family)
     tuning_count = len(tuning_args)
     is_server_hsmp = runner.is_hsmp(info.family)
@@ -334,7 +333,6 @@ def _show_info(info: CpuInfo, backend: str | None, json_out: bool) -> None:
             "cpu_model_int": info.cpu_model_int,
             "cpu_stepping_int": info.cpu_stepping_int,
             "pm_table_supported": pm_supported,
-            "secure_boot": sec_boot,
             "tuning_args_count": tuning_count,
             "mailbox": "HSMP" if is_server_hsmp else "MP1/RSMU",
         }
@@ -373,7 +371,6 @@ def _show_info(info: CpuInfo, backend: str | None, json_out: bool) -> None:
         else:
             pm_desc = "Unsupported"
         print(f"PM Table   : {pm_desc}")
-        print(f"Secure Boot: {'Enabled' if sec_boot else 'Disabled'}")
         print(f"Tuning     : {tuning_count} commands supported")
         print(f"Mailbox    : {mailbox_desc}")
         if backend is not None:

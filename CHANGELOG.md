@@ -20,7 +20,7 @@ Most changes in this release originate from UXTU v26.3.x & [ryzen_smu](https://g
   - Populated `PM_TABLE_CMDS` for 26 additional CPU families across desktop, server, and APUs.
   - Added 28 new PM table struct sizes in `TABLE_SIZES`
 - CLI improvements:
-  - `--info` and `--info --json` show active CCD count, decoded CPUID (family/model/stepping in decimal and hex), PM table version and buffer size, Secure Boot state, supported tuning commands count, and active mailbox protocol.
+  - `--info` and `--info --json` show active CCD count, decoded CPUID (family/model/stepping in decimal and hex), PM table version and buffer size, supported tuning commands count, and active mailbox protocol.
   - Added `tctl-limit` alias to `tctl-temp`.
 
 ### Changed
