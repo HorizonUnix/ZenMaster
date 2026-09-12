@@ -1,5 +1,43 @@
 # Changelog
 
+## [1.2.0] - 2026-09-12
+
+Most changes in this release originate from UXTU v26.3.x & [ryzen_smu](https://github.com/amkillam/ryzen_smu)
+
+### Added
+- New CPU family and architecture support:
+  - Enterprise, server, and workstation: Naples, Rome, Milan, Genoa, Bergamo, Siena, Turin, TurinDense (EPYC), Threadripper (1000/2000), Colfax (2990WX), CastlePeak (TR 3000), Chagall (TR 5000), and StormPeak (TR 7000).
+  - Mobile and embedded APUs: FireFlight, RavenRidge2, Pollock (distinguished from Dali via brand string), SonomaValley, Medusa1, OlympicRidge, and Medusa2.
+  - Licensed Zen 1 derivative: Hygon Dhyana (CPUID Family 24 / `0x18`) mapped to `SOCKET_AM4_V1`.
+- Dynamic CCD count detection (`smu.get_ccd_count()`): reads SMN fuse registers (`0x5D218` / `0x5D21C`) to detect active CCD count on multi-CCD chips.
+- Cross-process PCI mutex synchronization to prevent race conditions with external tools.
+- HSMP mailbox interface (`SOCKET_FP10_AM5`): added mailbox registers (`0x3B10A8C`, `0x3B10A90`, `0x3B10A94`) and `send_hsmp()` / `query_hsmp()`
+- New SMU tuning arguments and controls:
+  - HSMP power and frequency limits: `fast-spm-limit`, `slow-spm-limit`, `core-power-limit-offset`, `fclk-overclock-on-the-fly`, `cclk-fmax-offset`, `extra-psm-guardband`, `extra-psm-guardband-gfx`, `fit-limit-scalar`, `disable-gpuclockoverdrive`.
+  - HSMP and SMU mailbox queries: `get-smu-version`, `get-interface-version`, `get-metrics-table-version`, `get-metrics-table`, `get-metrics-table-dram-address`, `get-coper`, `get-cogfx`, `get-core-performance-order`, and `test`.
+  - Dedicated socket command tables for `SOCKET_AM5_MOBILE` (Dragon Range) and `SOCKET_AM5_FIRERANGE` (Fire Range).
+- Expanded PM table coverage:
+  - Populated `PM_TABLE_CMDS` for 26 additional CPU families across desktop, server, and APUs.
+  - Added 28 new PM table struct sizes in `TABLE_SIZES`
+- CLI improvements:
+  - `--info` and `--info --json` show active CCD count, decoded CPUID (family/model/stepping in decimal and hex), PM table version and buffer size, Secure Boot state, supported tuning commands count, and active mailbox protocol.
+  - Added `tctl-limit` alias to `tctl-temp`.
+
+### Changed
+- Renamed `zenmaster/table.py` to `zenmaster/sensors.py`. Aliased in `sys.modules["zenmaster.table"]` and top-level `table = sensors` for backward compatibility.
+- macOS backend: replaced `iokitcore.py` with modular `iopci.py` and `iokit.py` (w/ `sys.modules["zenmaster.iokitcore"]` backward-compatible alias).
+- Updated bundled Windows `RyzenSMU.bin` driver binary.
+- Curve Optimizer argument encoding:
+  - Negative `--set-coall` offsets are converted to 20-bit two's complement automatically.
+  - `--set-coper` supports `core:val`, `ccd:core:val`, and `ccd:ccx:core:val` notation, packing the CCD/CCX/core bitfields directly into SMU Arg0.
+  - HSMP Curve Optimizer offsets automatically map to signed 16-bit PSM margin and APIC ID routing.
+  - `--oc-clk-per-core` packs core, CCX, CCD, and frequency into SMU Arg0.
+- Automatic unit scaling in `apply()`: `tctl-temp` millidegrees (values >= 1000 divided by 1000) and HSMP `pbo-scalar` (values >= 100 divided by 10).
+
+### Fixed
+- Dragon Range and Fire Range command tables: removed unsupported `vrmsoc-current` and `vrmsocmax-current` opcodes to prevent SMU rejection errors.
+- Guarded `apu-skin-temp` execution in `apply()` to only run on APU families that expose the skin temperature mailbox, preventing timeouts on desktop and unsupported chips.
+
 ## [1.1.1] - 2026-07-15
 
 - The `Rembrandt` codename should be model `64` or `68` (previously it was `63` or `68`).
