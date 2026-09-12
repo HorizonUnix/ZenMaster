@@ -490,9 +490,17 @@ _SENSOR_ROWS = [
 
 
 def _show_sensors(json_out: bool, family: str = "") -> None:
+    if not smu.pm_table_supported(family):
+        msg = _pm_unavailable_msg(family)
+        if json_out:
+            print(json.dumps({"error": msg}))
+        else:
+            print(f"ZenMaster: {msg}", file=sys.stderr)
+        sys.exit(1)
+
     sensors = smu.read_pm_sensors(family)
     if sensors is None:
-        msg = _pm_unavailable_msg(family)
+        msg = "Failed to read PM table"
         if json_out:
             print(json.dumps({"error": msg}))
         else:

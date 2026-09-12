@@ -116,18 +116,21 @@ def pm_table_supported(family: str = "") -> bool:
 
 
 def read_pm_table(family: str = "") -> bytes | None:
+    ensure_backend()
     b = _backend()
     fn = getattr(b, "read_pm_table", None)
     return fn(family) if fn else None
 
 
 def read_pm_table_version(family: str = "") -> int:
+    ensure_backend()
     b = _backend()
     fn = getattr(b, "read_pm_table_version", None)
     return fn(family) if fn else 0
 
 
 def read_pm_table_full(family: str = "") -> tuple[bytes, int] | None:
+    ensure_backend()
     b = _backend()
     fn = getattr(b, "read_pm_table_full", None)
     if fn:
@@ -232,6 +235,15 @@ def get_bios_if_ver(family: str) -> int:
 
 def get_smu_version(family: str) -> int:
     ensure_backend()
+    b = _backend()
+    fn = getattr(b, "get_smu_version", None)
+    if fn is not None:
+        try:
+            ver = fn(family)
+            if ver:
+                return ver
+        except Exception:
+            pass
     status, out = query_mp1(family, 0x02, 1)
     if status == SMU_OK and out[0]:
         return out[0]
