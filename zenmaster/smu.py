@@ -58,10 +58,8 @@ def _backend() -> Any:
 
 def smu_command(msg_id: int, arg: int = 0) -> int:
     b = _backend() if callable(_backend) else _backend
-    fn = getattr(b, "smu_command", None)
-    if fn is not None:
-        return fn(msg_id, arg)
-    ensure_backend()
+    if getattr(b, "active_backend", None) is not None and not ensure_backend():
+        return SMU_FAILED
     b = _backend() if callable(_backend) else _backend
     fn = getattr(b, "smu_command", None)
     if fn is not None:
@@ -194,7 +192,9 @@ def send_arg(family: str, name: str, value: int) -> list[tuple[str, int, int]]:
     from zenmaster.errors import UnsupportedCPU
     if not runner.is_supported(family):
         raise UnsupportedCPU(f"'{family}' is not a supported CPU family")
-    ensure_backend()
+    b = _backend() if callable(_backend) else _backend
+    if getattr(b, "active_backend", None) is not None and active_backend() is None:
+        init()
     out: list[tuple[str, int, int]] = []
     use_hsmp = runner.is_hsmp(family)
     for is_mp1, op in runner.lookup(family, name):
@@ -228,25 +228,26 @@ def unavailable_reason() -> str | None:
 
 
 def get_bios_if_ver(family: str) -> int:
-    ensure_backend()
+    if not ensure_backend():
+        return 0
     status, out = query_mp1(family, 0x03, 0)
     return out[0] if status == SMU_OK else 0
 
 
 def get_smu_version(family: str) -> int:
-    ensure_backend()
-    b = _backend()
-    fn = getattr(b, "get_smu_version", None)
-    if fn is not None:
-        try:
-            ver = fn(family)
-            if ver:
-                return ver
-        except Exception:
-            pass
-    status, out = query_mp1(family, 0x02, 1)
-    if status == SMU_OK and out[0]:
-        return out[0]
+    if ensure_backend():
+        b = _backend()
+        fn = getattr(b, "get_smu_version", None)
+        if fn is not None:
+            try:
+                ver = fn(family)
+                if ver:
+                    return ver
+            except Exception:
+                pass
+        status, out = query_mp1(family, 0x02, 1)
+        if status == SMU_OK and out[0]:
+            return out[0]
     if platform.system() == "Linux":
         for path in ("/sys/kernel/ryzen_smu_drv/version", "/sys/kernel/ryzen_smu_drv/drv_version"):
             try:

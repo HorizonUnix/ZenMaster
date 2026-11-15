@@ -1,9 +1,11 @@
 from __future__ import annotations
 import time
+from typing import Any
 
 from zenmaster.smu import SMU_FAILED, SMU_REJECTED_PREREQ
 
 NARGS = 6
+DEFAULT_TIMEOUT: float = 5.0
 
 MP1: dict[str, tuple[int, int, int]] = {
     "SummitRidge":   (0x3B10528, 0x3B10564, 0x3B10598),
@@ -49,35 +51,42 @@ HSMP: dict[str, tuple[int, int, int]] = {
 HSMP_DEFAULT = (0x3B10A8C, 0x3B10A90, 0x3B10A94)
 
 
-def poll_response(smn_read, rsp: int, poll_n: int, fast_poll: int, poll_sleep: float) -> int:
-    for i in range(poll_n):
+def poll_response(smn_read: Any, rsp: int, fast_poll: int = 64, poll_sleep: float = 0.0005,
+                  timeout: float = DEFAULT_TIMEOUT) -> int:
+    for _ in range(fast_poll):
         r = smn_read(rsp)
         if r:
             return r
-        if i >= fast_poll:
-            time.sleep(poll_sleep)
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        time.sleep(poll_sleep)
+        r = smn_read(rsp)
+        if r:
+            return r
     return 0
 
 
-def mailbox_send(smn_write, smn_read, msg: int, rsp: int, args_addr: int, op: int, arg0: int,
-                  poll_n: int, fast_poll: int, poll_sleep: float) -> int:
+def mailbox_send(smn_write: Any, smn_read: Any, msg: int, rsp: int, args_addr: int, op: int, arg0: int,
+                 fast_poll: int = 64, poll_sleep: float = 0.0005,
+                 timeout: float = DEFAULT_TIMEOUT) -> int:
     smn_write(rsp, 0)
     smn_write(args_addr, arg0)
     for i in range(1, NARGS):
         smn_write(args_addr + i * 4, 0)
     smn_write(msg, op)
-    return poll_response(smn_read, rsp, poll_n, fast_poll, poll_sleep) or SMU_FAILED
+    return poll_response(smn_read, rsp, fast_poll, poll_sleep, timeout) or SMU_FAILED
 
 
-def mailbox_query(smn_write, smn_read, msg: int, rsp: int, args_base: int, op: int, arg0: int,
-                   poll_n: int, fast_poll: int, poll_sleep: float) -> tuple[int, list[int]]:
+def mailbox_query(smn_write: Any, smn_read: Any, msg: int, rsp: int, args_base: int, op: int, arg0: int,
+                  fast_poll: int = 64, poll_sleep: float = 0.0005,
+                  timeout: float = DEFAULT_TIMEOUT) -> tuple[int, list[int]]:
     smn_write(rsp, 0)
     for i in range(NARGS):
         smn_write(args_base + i * 4, 0)
     if arg0:
         smn_write(args_base, arg0)
     smn_write(msg, op)
-    r = poll_response(smn_read, rsp, poll_n, fast_poll, poll_sleep)
+    r = poll_response(smn_read, rsp, fast_poll, poll_sleep, timeout)
     if r:
         return r, [smn_read(args_base + i * 4) for i in range(NARGS)]
     return SMU_FAILED, [0] * NARGS

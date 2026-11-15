@@ -11,7 +11,7 @@ from zenmaster.errors import BackendUnavailable, SMUNotInitialized
 from zenmaster.pmtable import PM_TABLE_CMDS, TABLE_SIZES, DEFAULT_TABLE_SIZE
 from zenmaster.mailbox import (
     MP1, MP1_DEFAULT, RSMU, RSMU_DEFAULT, HSMP, HSMP_DEFAULT,
-    mailbox_send, mailbox_query, transfer_with_retry,
+    DEFAULT_TIMEOUT, mailbox_send, mailbox_query, transfer_with_retry,
 )
 from zenmaster.smu import SMU_OK, ModuleStatus
 
@@ -24,9 +24,9 @@ _DEVICE_PATHS = [
 ]
 _IOCTL_LOAD  = 0xA1B22084
 _IOCTL_EXEC  = 0xA1B22104
-_POLL_N      = 8192
 _FAST_POLL   = 64
 _POLL_SLEEP  = 0.0005
+_TIMEOUT     = DEFAULT_TIMEOUT
 _lock        = threading.Lock()
 _handle      = None
 _k32         = None
@@ -56,6 +56,8 @@ def _query_pawnio_info() -> str | None:
             return winreg.QueryValueEx(key, "DisplayVersion")[0]
         except OSError:
             return ""
+        finally:
+            winreg.CloseKey(key)
     except OSError:
         return None
 
@@ -81,7 +83,7 @@ def module_status() -> ModuleStatus:
 
 
 def is_available() -> bool:
-    return _pawnio_info() is not None
+    return _handle is not None or _pawnio_info() is not None
 
 
 def acquire_pci_mutex(timeout_ms: int = _PCI_MUTEX_TIMEOUT_MS) -> Any:
@@ -186,16 +188,18 @@ def init() -> str:
         raise BackendUnavailable(f"PawnIO module not found: {module_path}")
 
     ver = _pawnio_info()
-    if ver is None:
-        raise BackendUnavailable(
-            "PawnIO driver is not installed.\n"
-            f"Download and run the installer: {_PAWNIO_INSTALLER_URL}\n"
-            "After installation, reboot and try again."
-        )
-
-    k32    = _make_k32()
+    try:
+        k32 = _make_k32()
+    except AttributeError as e:
+        raise BackendUnavailable("PawnIO driver is only supported on Windows.") from e
     handle = _open_device(k32)
     if handle is None:
+        if ver is None:
+            raise BackendUnavailable(
+                "PawnIO driver is not installed.\n"
+                f"Download and run the installer: {_PAWNIO_INSTALLER_URL}\n"
+                "After installation, reboot and try again."
+            )
         raise BackendUnavailable(
             "PawnIO device not found. The driver may need a reboot to activate.\n"
             f"If not installed: {_PAWNIO_INSTALLER_URL}"
@@ -301,12 +305,12 @@ def _smn_write(addr: int, value: int) -> None:
 
 def _mailbox_send(msg: int, rsp: int, args_addr: int, op: int, arg0: int) -> int:
     return mailbox_send(_smn_write, _smn_read, msg, rsp, args_addr, op, arg0,
-                         _POLL_N, _FAST_POLL, _POLL_SLEEP)
+                        _FAST_POLL, _POLL_SLEEP, _TIMEOUT)
 
 
 def _mailbox_query(msg: int, rsp: int, args_base: int, op: int, arg0: int = 0) -> tuple[int, list[int]]:
     return mailbox_query(_smn_write, _smn_read, msg, rsp, args_base, op, arg0,
-                          _POLL_N, _FAST_POLL, _POLL_SLEEP)
+                         _FAST_POLL, _POLL_SLEEP, _TIMEOUT)
 
 
 def _resolve_pm_table() -> tuple[int, int] | None:
@@ -426,7 +430,8 @@ def smu_command(msg_id: int, arg: int = 0) -> int:
 
 
 def get_smu_version(family: str = "") -> int:
-    _require_init()
+    if _handle is None or _k32 is None:
+        return 0
     with _lock:
         with pci_mutex_guard():
             out = _execute("ioctl_get_smu_version", [], 1)
@@ -445,29 +450,46 @@ def pm_table_supported(family: str = "") -> bool:
     return family in PM_TABLE_CMDS
 
 
+def _cache_pm_ver(ver: int) -> int:
+    global _cached_pm_ver, _cached_pm_size
+    _cached_pm_ver = ver & 0xFFFFFFFF
+    _cached_pm_size = TABLE_SIZES.get(_cached_pm_ver, DEFAULT_TABLE_SIZE)
+    return _cached_pm_ver
+
+
+def _read_pm_ver_rsmu(family: str = "") -> int:
+    if _handle is None or _k32 is None or family not in PM_TABLE_CMDS:
+        return 0
+    ver_op = PM_TABLE_CMDS[family][0]
+    msg, rsp, args_base = RSMU.get(family, RSMU_DEFAULT)
+    with _lock:
+        with pci_mutex_guard():
+            status, out = _mailbox_query(msg, rsp, args_base, ver_op)
+    return (out[0] & 0xFFFFFFFF) if status == SMU_OK and out[0] else 0
+
+
 def read_pm_table_full(family: str = "") -> tuple[bytes, int] | None:
-    _require_init()
-    if not _handle:
+    if _handle is None or _k32 is None:
         return None
 
     global _cached_pm_ver, _cached_pm_size
 
     if _cached_pm_ver is None:
         resolved = _resolve_pm_table()
-        if resolved is not None:
-            _cached_pm_ver = resolved[0] & 0xFFFFFFFF
-            _cached_pm_size = TABLE_SIZES.get(_cached_pm_ver, DEFAULT_TABLE_SIZE)
+        if resolved is not None and resolved[0]:
+            _cache_pm_ver(resolved[0])
         elif family in PM_TABLE_CMDS:
-            ver = read_pm_table_version(family)
+            ver = _read_pm_ver_rsmu(family)
             if ver:
-                _cached_pm_ver = ver & 0xFFFFFFFF
-                _cached_pm_size = TABLE_SIZES.get(_cached_pm_ver, DEFAULT_TABLE_SIZE)
+                _cache_pm_ver(ver)
 
     if _cached_pm_ver is None or not _cached_pm_ver:
         return None
 
     ver = _cached_pm_ver & 0xFFFFFFFF
-    size = _cached_pm_size or DEFAULT_TABLE_SIZE
+    if _cached_pm_size is None:
+        _cached_pm_size = TABLE_SIZES.get(ver, DEFAULT_TABLE_SIZE)
+    size = _cached_pm_size
 
     _update_pm_table(family)
 
@@ -477,10 +499,8 @@ def read_pm_table_full(family: str = "") -> tuple[bytes, int] | None:
 
     if not raw:
         resolved = _resolve_pm_table()
-        if resolved is not None:
-            _cached_pm_ver = resolved[0] & 0xFFFFFFFF
-            _cached_pm_size = TABLE_SIZES.get(_cached_pm_ver, DEFAULT_TABLE_SIZE)
-            ver = _cached_pm_ver
+        if resolved is not None and resolved[0]:
+            ver = _cache_pm_ver(resolved[0])
             size = _cached_pm_size or DEFAULT_TABLE_SIZE
             n = min((size + 7) // 8, 512)
             _update_pm_table(family)
@@ -497,23 +517,16 @@ def read_pm_table_full(family: str = "") -> tuple[bytes, int] | None:
 
 
 def read_pm_table_version(family: str = "") -> int:
-    global _cached_pm_ver
     if _cached_pm_ver:
         return _cached_pm_ver
-    if _handle:
-        resolved = _resolve_pm_table()
-        if resolved and resolved[0]:
-            _cached_pm_ver = resolved[0] & 0xFFFFFFFF
-            return _cached_pm_ver
-    if _handle and family in PM_TABLE_CMDS:
-        ver_op = PM_TABLE_CMDS[family][0]
-        msg, rsp, args_base = RSMU.get(family, RSMU_DEFAULT)
-        with _lock:
-            with pci_mutex_guard():
-                status, out = _mailbox_query(msg, rsp, args_base, ver_op)
-        if status == SMU_OK and out[0]:
-            _cached_pm_ver = out[0] & 0xFFFFFFFF
-            return _cached_pm_ver
+    if _handle is None or _k32 is None:
+        return 0
+    resolved = _resolve_pm_table()
+    if resolved and resolved[0]:
+        return _cache_pm_ver(resolved[0])
+    ver = _read_pm_ver_rsmu(family)
+    if ver:
+        return _cache_pm_ver(ver)
     return 0
 
 

@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.2.2] - 2026-11-15
+
+### Changed
+- Linux, Windows, and macOS backends (`mailbox.py`, `linux.py`, `windows.py`, `macos.py`): standardized the SMU mailbox polling timeout across all three platforms to a 5.0-second monotonic wall-clock deadline (`DEFAULT_TIMEOUT = 5.0` in `mailbox.poll_response()`).
+- Linux backend (`linux.py`): `init()` now falls back to writable `ryzen_smu` sysfs access when PCI direct config space is blocked even with Secure Boot disabled (e.g., kernel lockdown).
+- Windows backend (`windows.py`): `init()` and `is_available()` now check and open `\Device\PawnIO` even when the `Uninstall\PawnIO` registry key is absent, supporting portable and bundled PawnIO driver setups.
+
+### Fixed
+- SMU dispatch (`smu.py`): updated `smu_command()`, `send_arg()`, `get_bios_if_ver()`, and `get_smu_version()` to consistently ensure or verify backend availability instead of leaking unhandled `SMUNotInitialized` errors or leaving fallback paths unreachable.
+- Linux backend (`linux.py`): guarded `_read_pm_table_pci()`, `get_smu_version()`, and `read_pm_table_version()` when `_backend is None` so uninitialized calls return `None`/`0` cleanly instead of raising `SMUNotInitialized`; masked `_pci_write()` addresses with `addr & ~3`.
+- Windows backend (`windows.py`): guarded uninitialized `get_smu_version()`, `read_pm_table_full()`, and `read_pm_table_version()` to return `0`/`None` cleanly; fixed `_query_pawnio_info()` to close its `winreg` key handle, guarded missing `ctypes.windll` on non-Windows hosts, and synced `_cached_pm_size` when `read_pm_table_version()` caches `_cached_pm_ver` before `read_pm_table_full()`.
+- macOS backend (`macos.py`) & hardware (`hardware.py`): required the `debug=0x144` boot-arg (or active `iopci` backend) for `iopci` in `is_available()` and `module_status()`, guarded uninitialized `get_smu_version()` and `read_pm_table_version()` (including `iopci`), reset `DRIVER_NAME` back to `"DirectHW"` in `close()`, set explicit `sysctlbyname` ctypes signatures, and decoded 32-bit `c_int32` sysctl results in `_sysctl_int()`.
+
 ## [1.2.1] - 2026-09-12
 
 ### Fixed

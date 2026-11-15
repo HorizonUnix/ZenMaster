@@ -97,7 +97,16 @@ def _libSystem() -> ctypes.CDLL | None:
     global _libc
     if _libc is None:
         try:
-            _libc = ctypes.CDLL("/usr/lib/libSystem.B.dylib")
+            libc = ctypes.CDLL("/usr/lib/libSystem.B.dylib")
+            libc.sysctlbyname.restype = ctypes.c_int
+            libc.sysctlbyname.argtypes = [
+                ctypes.c_char_p,
+                ctypes.c_void_p,
+                ctypes.POINTER(ctypes.c_size_t),
+                ctypes.c_void_p,
+                ctypes.c_size_t,
+            ]
+            _libc = libc
         except (OSError, Exception):
             return None
     return _libc
@@ -128,6 +137,8 @@ def _sysctl_int(name: str) -> int:
         size = ctypes.c_size_t(ctypes.sizeof(val))
         if libc.sysctlbyname(name.encode(), ctypes.byref(val), ctypes.byref(size), None, 0) != 0:
             return 0
+        if size.value == 4:
+            return int(ctypes.c_int32(val.value & 0xFFFFFFFF).value)
         return int(val.value)
     except (OSError, Exception):
         return 0

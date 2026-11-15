@@ -12,7 +12,7 @@ from zenmaster.errors import BackendUnavailable, SMUNotInitialized
 from zenmaster.pmtable import PM_TABLE_CMDS, TABLE_SIZES, DEFAULT_TABLE_SIZE
 from zenmaster.mailbox import (
     MP1, MP1_DEFAULT, RSMU, RSMU_DEFAULT, HSMP, HSMP_DEFAULT,
-    mailbox_send, mailbox_query, transfer_with_retry,
+    DEFAULT_TIMEOUT, mailbox_send, mailbox_query, transfer_with_retry,
 )
 from zenmaster.smu import SMU_OK, ModuleStatus
 
@@ -25,9 +25,9 @@ NB_DATA  = 0xBC
 PCI_ADDR = 0xCF8
 PCI_DATA = 0xCFC
 
-_POLL_N     = 100
 _FAST_POLL  = 64
 _POLL_SLEEP = 0.0005
+_TIMEOUT    = DEFAULT_TIMEOUT
 _lock       = threading.Lock()
 _backend: str | None = None
 _force: str | None = None
@@ -112,13 +112,17 @@ def module_version_ok() -> bool:
 
 
 def module_status() -> ModuleStatus:
-    if not is_available():
+    if _backend == "iopci":
+        return ModuleStatus(True, "loaded", "", None)
+    if not directhw.is_loaded():
+        if _debug_boot_arg_ok() and iopci.is_available():
+            return ModuleStatus(True, "loaded", "", None)
         return ModuleStatus(False, "unknown", "", "not_loaded")
     return ModuleStatus(True, "loaded", "", None)
 
 
 def is_available() -> bool:
-    return directhw.is_loaded() or iopci.is_available()
+    return directhw.is_loaded() or (_debug_boot_arg_ok() and iopci.is_available())
 
 
 def init() -> str:
@@ -200,12 +204,12 @@ def _smn_write(addr: int, value: int) -> None:
 
 def _mailbox_send(msg: int, rsp: int, args_addr: int, op: int, arg0: int) -> int:
     return mailbox_send(_smn_write, _smn_read, msg, rsp, args_addr, op, arg0,
-                         _POLL_N, _FAST_POLL, _POLL_SLEEP)
+                        _FAST_POLL, _POLL_SLEEP, _TIMEOUT)
 
 
 def _mailbox_query(msg: int, rsp: int, args_base: int, op: int, arg0: int = 0) -> tuple[int, list[int]]:
     return mailbox_query(_smn_write, _smn_read, msg, rsp, args_base, op, arg0,
-                          _POLL_N, _FAST_POLL, _POLL_SLEEP)
+                         _FAST_POLL, _POLL_SLEEP, _TIMEOUT)
 
 
 def _require_init() -> None:
@@ -276,6 +280,8 @@ def smu_command(msg_id: int, arg: int = 0) -> int:
 
 
 def get_smu_version(family: str = "") -> int:
+    if _backend is None:
+        return 0
     status, out = query_mp1(family, 0x02, 1)
     return (out[0] & 0xFFFFFFFF) if status == SMU_OK and out[0] else 0
 
@@ -329,6 +335,8 @@ def read_pm_table_full(family: str = "") -> tuple[bytes, int] | None:
 
 def read_pm_table_version(family: str = "") -> int:
     global _cached_pm_ver
+    if _backend in (None, "iopci"):
+        return 0
     if _cached_pm_ver:
         return _cached_pm_ver
 
@@ -354,8 +362,9 @@ def read_pm_table(family: str = "") -> bytes | None:
 
 
 def close() -> None:
-    global _backend, _cached_pm_ver
+    global _backend, _cached_pm_ver, DRIVER_NAME
     directhw.close()
     iopci.close()
+    DRIVER_NAME = "DirectHW"
     _backend = None
     _cached_pm_ver = None

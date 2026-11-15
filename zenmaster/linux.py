@@ -13,7 +13,7 @@ from zenmaster.errors import BackendUnavailable, SMUNotInitialized
 from zenmaster.pmtable import PM_TABLE_CMDS, TABLE_SIZES, DEFAULT_TABLE_SIZE
 from zenmaster.mailbox import (
     MP1, MP1_DEFAULT, RSMU, RSMU_DEFAULT, HSMP, HSMP_DEFAULT, NARGS,
-    transfer_with_retry,
+    DEFAULT_TIMEOUT, poll_response, transfer_with_retry,
 )
 from zenmaster.smu import SMU_OK, SMU_FAILED, SMU_REJECTED_PREREQ, ModuleStatus
 
@@ -90,7 +90,7 @@ MIN_VERSION = (0, 1, 7)
 
 _POLL_N   = 100
 _SLEEP_S  = 0.0001
-_DEADLINE = 1.0
+_DEADLINE = DEFAULT_TIMEOUT
 _lock     = threading.Lock()
 _backend: str | None = None
 _fd: int | None = None
@@ -163,7 +163,7 @@ def secure_boot_enabled() -> bool:
     try:
         out = subprocess.run(
             ["mokutil", "--sb-state"],
-            capture_output=True, text=True, timeout=3,
+            capture_output=True, text=True, timeout=5,
         ).stdout.lower()
         return "enabled" in out
     except Exception:
@@ -185,6 +185,17 @@ def _pci_writable() -> bool:
                 return len(data) >= 4 and struct.unpack("<I", data)[0] == 0x47
             finally:
                 os.close(fd)
+    except OSError:
+        return False
+
+
+def _ryzen_smu_writable() -> bool:
+    if not (os.path.isdir(DRIVER_PATH) and module_version_ok() and os.path.exists(SMN_PATH)):
+        return False
+    try:
+        fd = os.open(SMN_PATH, os.O_RDWR)
+        os.close(fd)
+        return True
     except OSError:
         return False
 
@@ -217,6 +228,10 @@ def init() -> str:
 
     if _pci_writable():
         _backend = "pci"
+        return _backend
+
+    if _ryzen_smu_writable():
+        _backend = "ryzen_smu"
         return _backend
 
     if os.path.exists(PCI_CONFIG):
@@ -260,7 +275,7 @@ def _pci_read(fd: int, addr: int) -> int:
 
 def _pci_write(fd: int, addr: int, value: int) -> None:
     os.lseek(fd, NB_ADDR, os.SEEK_SET)
-    os.write(fd, struct.pack("<I", addr))
+    os.write(fd, struct.pack("<I", addr & ~3))
     os.lseek(fd, NB_DATA, os.SEEK_SET)
     os.write(fd, struct.pack("<I", value))
 
@@ -271,17 +286,7 @@ def _send_seq(write: Any, read: Any, fd: int, msg: int, rsp: int, args: int, op:
     for i in range(1, NARGS):
         write(fd, args + i * 4, 0)
     write(fd, msg, op)
-    for _ in range(_POLL_N):
-        r = read(fd, rsp)
-        if r:
-            return r
-    deadline = time.monotonic() + _DEADLINE
-    while time.monotonic() < deadline:
-        time.sleep(_SLEEP_S)
-        r = read(fd, rsp)
-        if r:
-            return r
-    return SMU_FAILED
+    return poll_response(lambda a: read(fd, a), rsp, _POLL_N, _SLEEP_S, _DEADLINE) or SMU_FAILED
 
 
 def _require_init() -> None:
@@ -413,6 +418,8 @@ def _read_devmem(phys: int, size: int) -> bytes | None:
 
 def _read_pm_table_pci(family: str) -> tuple[bytes, int] | None:
     global _cached_pm_ver
+    if _backend is None:
+        return None
     cmds = PM_TABLE_CMDS.get(family)
     if cmds is None:
         return None
@@ -441,12 +448,14 @@ def _read_pm_table_pci(family: str) -> tuple[bytes, int] | None:
 
 
 def get_smu_version(family: str = "") -> int:
-    if _backend == "ryzen_smu":
+    if _backend in ("ryzen_smu", None):
         try:
             with open(DRIVER_PATH + "/version", "r") as f:
                 return int(f.read().strip(), 16) & 0xFFFFFFFF
         except (OSError, ValueError):
             pass
+    if _backend is None:
+        return 0
     status, out = query_mp1(family, 0x02, 1)
     return (out[0] & 0xFFFFFFFF) if status == SMU_OK and out[0] else 0
 
@@ -488,7 +497,7 @@ def read_pm_table_version(family: str = "") -> int:
     except OSError:
         pass
 
-    if family in PM_TABLE_CMDS:
+    if _backend is not None and family in PM_TABLE_CMDS:
         ver_op = PM_TABLE_CMDS[family][0]
         status, out = query_rsmu(family, ver_op, 0)
         if status == SMU_OK and out[0]:
